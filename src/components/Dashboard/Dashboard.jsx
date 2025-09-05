@@ -1,8 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import Sidebar from '../Layout/SideBar';
+
+import Sidebar from '@/components/Layout/SideBar';
+import UserManagement from '@/components/UserManagement/UserManagement';
+import OrderManagement from '@/components/OrderManagement/OrderManagement';
+import ManifestRequests from '@/components/ManifestRequests/ManifestRequests';
+import Transactions from '@/components/TransactionManagement/TransactionManagement';
+import RateManagement from '@/components/RateManagement/RateManagement';
+import WalletCredits from '@/components/WalletCredit/WalletCredit';
+import Discounts from '@/components/DiscountManagement/DiscountManagement';
+import RBFM from '@/components/RBFM/RBFM';
+
+/**
+ * NOTE:
+ * Previously this file imported itself which caused infinite recursion.
+ * If you have a dedicated dashboard main component (e.g. DashboardMain.jsx),
+ * replace the inline DashboardHome below with that import.
+ */
 
 const Dashboard = () => {
   const [stats, setStats] = useState([]);
@@ -190,4 +207,99 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+
+
+export default function DashboardContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [activeModule, setActiveModule] = useState(null);
+  const [role, setRole] = useState(null);
+
+  const decodeToken = useCallback((token) => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Failed to decode token:', error);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    // run once on mount
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
+    const decoded = decodeToken(token);
+
+    if (decoded?.role) {
+      setRole(decoded.role);
+
+      const initialTabFromUrl = searchParams.get('tab');
+      if (initialTabFromUrl) {
+        setActiveModule(initialTabFromUrl);
+      } else {
+        setActiveModule(decoded.role === 'SuperAdmin' ? 'dashboard' : 'users');
+      }
+    } else {
+      localStorage.removeItem('token');
+      router.push('/');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run only once
+
+  // sync activeModule -> URL (avoid loops by not depending on searchParams)
+  useEffect(() => {
+    if (!activeModule) return;
+
+    const currentTab = searchParams.get('tab');
+    if (activeModule !== currentTab) {
+      router.replace(`/dashboard?tab=${activeModule}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModule, router]);
+
+  const renderContent = () => {
+    switch (activeModule) {
+      case 'dashboard': return <Dashboard />;
+      case 'users': return <UserManagement />;
+      case 'pickup-requests': return <ManifestRequests />;
+      case 'orders': return <OrderManagement />;
+      case 'transactions': return <Transactions />;
+      case 'rates': return <RateManagement />;
+      case 'wallet': return <WalletCredits />;
+      case 'discounts': return <Discounts />;
+      case 'rbfm': return <RBFM />;
+      default: return <UserManagement />;
+    }
+  };
+
+  if (!activeModule) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen">
+        <p className="text-gray-500">Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex">
+      <Sidebar activeModule={activeModule} setActiveModule={setActiveModule} />
+      <main className="flex-1 p-6">
+        {renderContent()}
+      </main>
+    </div>
+  );
+}

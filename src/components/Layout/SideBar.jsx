@@ -57,6 +57,7 @@ const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen })
 
   /**
    * Fetch menus based on role from backend
+   * only update state if data actually changed to avoid re-renders
    */
   const fetchMenu = async (token) => {
     try {
@@ -68,10 +69,18 @@ const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen })
       });
 
       const data = await res.json();
+      const newMenu = data?.menu || [];
+
       if (res.ok) {
-        setMenuItems(data.menu || []);
+        setMenuItems(prev => {
+          try {
+            return JSON.stringify(prev) !== JSON.stringify(newMenu) ? newMenu : prev;
+          } catch {
+            return newMenu;
+          }
+        });
       } else {
-        console.error('Failed to fetch menu:', data.message);
+        console.error('Failed to fetch menu:', data?.message || data);
       }
     } catch (error) {
       console.error('Error fetching menu:', error);
@@ -79,32 +88,44 @@ const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen })
   };
 
   useEffect(() => {
+    // run only once on mount
     const token = localStorage.getItem('token');
     if (!token) {
-      router.push('/'); // Redirect to login
+      router.push('/');
       return;
     }
 
     const decoded = decodeToken(token);
+
     if (decoded?.role) {
-      setUser({
+      // update user only if different
+      const newUser = {
         name: decoded.name || 'Unknown User',
         email: decoded.email || 'no-email@example.com',
         role: decoded.role,
+      };
+
+      setUser(prev => {
+        try {
+          return JSON.stringify(prev) !== JSON.stringify(newUser) ? newUser : prev;
+        } catch {
+          return newUser;
+        }
       });
 
-      // Fetch dynamic menus
+      // fetch menu once
       fetchMenu(token);
     } else {
-      // If no valid role found, force re-login
       localStorage.removeItem('token');
       router.push('/');
     }
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run only once
 
   const handleNavigation = (item) => {
     setActiveModule(item.tab); // tab comes directly from backend
     if (isMobile) setIsOpen(false);
+    // update URL - parent may also sync URL, so this is just navigation
     router.push(`/dashboard?tab=${item.tab}`);
   };
 
