@@ -34,7 +34,7 @@ const OrderManagement = () => {
   const fetchOrders = async () => {
     try {
       // TODO: Replace with actual API call
-      const response = await axios.get(`http://localhost:5000/api/orders/total`)
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`)
       if (response.status === 200) {
         setOrders(response?.data?.data || []);
         setLoading(false);

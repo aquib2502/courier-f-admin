@@ -20,7 +20,7 @@ const LoginForm = () => {
     setError(null); // clear old error
     console.log('Submitting credentials:', credentials);
     try {
-      const response = await axios.post('http://localhost:5000/api/admin/login', credentials);
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/login`, credentials);
       const { token } = response.data;
 
       if (token) {

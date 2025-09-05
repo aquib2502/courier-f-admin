@@ -24,7 +24,7 @@ const RateManagement = () => {
     rate: ''
   });
 
-  const API_URL = 'http://localhost:5000/api/rates';
+  const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/rates`;
 
   // ================== FETCH RATES ==================
   const fetchRates = async () => {

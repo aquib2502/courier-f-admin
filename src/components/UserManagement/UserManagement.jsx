@@ -35,7 +35,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     // TODO: Replace with actual API call
     try {
-      const response = await axios.get("http://localhost:5000/api/admin/users");
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`);
       setUsers(response.data.users);
     } catch (error) {
       console.error("Failed to fetch users:", error);
@@ -92,7 +92,7 @@ const UserManagement = () => {
   };
   const handleApprove = async (userId) => {
     try {
-      await axios.patch(`http://localhost:5000/api/admin/updateKYC/${userId}`, {
+      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateKYC/${userId}`, {
         kycStatus: "approved",
       });
       fetchUsers(); // refresh list
@@ -105,7 +105,7 @@ const UserManagement = () => {
 
   const handleReject = async (userId) => {
     try {
-      await axios.patch(`http://localhost:5000/api/admin/updateKYC/${userId}`, {
+      await axios.patch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateKYC/${userId}`, {
         kycStatus: "rejected",
       });
       fetchUsers(); // refresh list
@@ -119,7 +119,7 @@ const UserManagement = () => {
   const onUpdateKYC = async (userId, newStatus) => {
     try {
       const response = await axios.patch(
-        `http://localhost:5000/api/admin/updateKYC/${userId}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateKYC/${userId}`,
         {
           kycStatus: newStatus,
         }

@@ -29,7 +29,7 @@ const DiscountManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/admin/users');
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`);
       setUsers(response?.data?.users || []);
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -41,7 +41,7 @@ const DiscountManagement = () => {
   const updateUserDiscount = async (userId, discountRate) => {
     setUpdatingUserId(userId);
     try {
-      await axios.put(`http://localhost:5000/api/admin/updateuser/${userId}`, {
+      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateuser/${userId}`, {
         discountRate: parseFloat(discountRate)
       });
       

@@ -36,7 +36,7 @@ const ManifestRequest = () => {
 
   const fetchManifests = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/manifests/getallmanifest');
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/getallmanifest`);
       if (response.data.success) {
         setManifests(response.data.data);
       }
@@ -49,7 +49,7 @@ const ManifestRequest = () => {
 
   const handleManifestAction = async (manifestId, action) => {
     try {
-      const response = await axios.put(`http://localhost:5000/api/manifests/${manifestId}/status`, {
+      const response = await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/${manifestId}/status`, {
         status: action === 'approve' ? 'approved' : 'rejected'
       });
       
@@ -67,7 +67,7 @@ const ManifestRequest = () => {
     setScanError('');
 
     try {
-      const response = await axios.put(`http://localhost:5000/api/manifests/${manifestId}/status`, {
+      const response = await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/${manifestId}/status`, {
         status: 'picked_up'
       });
 

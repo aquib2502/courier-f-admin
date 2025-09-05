@@ -31,7 +31,7 @@ const ProofModal = ({ isOpen, onClose, user, onApprove, onReject }) => {
         <div className="space-y-3">
           {user.aadharProof && (
             <a
-              href={`http://localhost:5000/uploads/${user.aadharProof}`}
+              href={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${user.aadharProof}`}
               download
               target="_blank"
               rel="noopener noreferrer"
@@ -42,7 +42,7 @@ const ProofModal = ({ isOpen, onClose, user, onApprove, onReject }) => {
           )}
           {user.panProof && (
             <a
-              href={`http://localhost:5000/uploads/${user.panProof}`}
+              href={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${user.panProof}`}
               download
               target="_blank"
               rel="noopener noreferrer"
@@ -53,7 +53,7 @@ const ProofModal = ({ isOpen, onClose, user, onApprove, onReject }) => {
           )}
           {user.gstProof && (
             <a
-              href={`http://localhost:5000/uploads/${user.gstProof}`}
+              href={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${user.gstProof}`}
               download
               target="_blank"
               rel="noopener noreferrer"
@@ -64,7 +64,7 @@ const ProofModal = ({ isOpen, onClose, user, onApprove, onReject }) => {
           )}
           {user.iecProof && (
             <a
-              href={`http://localhost:5000/uploads/${user.iecProof}`}
+              href={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${user.iecProof}`}
               download
               target="_blank"
               rel="noopener noreferrer"

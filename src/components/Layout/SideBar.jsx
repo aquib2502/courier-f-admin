@@ -60,7 +60,7 @@ const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen })
    */
   const fetchMenu = async (token) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/roles/menu`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/roles/menu`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,

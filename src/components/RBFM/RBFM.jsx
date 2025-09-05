@@ -16,7 +16,7 @@ const RBFM = () => {
     try {
       setLoading(true);
       const res = await axios.get(
-        `http://localhost:5000/api/roles/menu?allRoles=true`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/roles/menu?allRoles=true`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -34,7 +34,7 @@ const RBFM = () => {
     try {
       setUpdating(true);
       await axios.post(
-        `http://localhost:5000/api/roles/toggle`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/roles/toggle`,
         { roleName, tab },
         {
           headers: {
