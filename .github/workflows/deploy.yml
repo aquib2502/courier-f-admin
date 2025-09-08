@@ -1,4 +1,4 @@
-name: Deploy User Frontend
+name: Deploy Admin Frontend
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
           username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "🚀 Starting frontend deployment..."
+            echo "🚀 Starting  Admin frontend deployment..."
 
             # Navigate to frontend directory
             cd /home/deployer/courier-f-admin
