@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Loader2, Check, X, Shield, Users, Key, Settings } from 'lucide-react';
+import { Loader2, Check, X, Shield, Users, Key, Settings, DollarSign, Cog, Truck } from 'lucide-react';
 
 const RBFM = () => {
   const [roles, setRoles] = useState([]);
@@ -61,7 +61,10 @@ const RBFM = () => {
       'Manager': 'from-blue-500 to-blue-600',
       'Employee': 'from-green-500 to-green-600',
       'User': 'from-orange-500 to-orange-600',
-      'Guest': 'from-gray-500 to-gray-600'
+      'Guest': 'from-gray-500 to-gray-600',
+      'Finance': 'from-emerald-500 to-emerald-600',
+      'Operator': 'from-cyan-500 to-cyan-600',
+      'Pickup': 'from-amber-500 to-amber-600'
     };
     return colors[roleName] || 'from-indigo-500 to-indigo-600';
   };
@@ -72,8 +75,26 @@ const RBFM = () => {
       case 'admin': return Shield;
       case 'manager': return Users;
       case 'employee': return Key;
+      case 'finance': return DollarSign;
+      case 'operator': return Cog;
+      case 'pickup': return Truck;
       default: return Settings;
     }
+  };
+
+  // Get role description
+  const getRoleDescription = (roleName) => {
+    const descriptions = {
+      'Admin': 'Full system access and management',
+      'Manager': 'Team and project oversight',
+      'Employee': 'Standard user access',
+      'User': 'Basic user permissions',
+      'Guest': 'Limited read-only access',
+      'Finance': 'Financial data and transaction management',
+      'Operator': 'System operations and monitoring',
+      'Pickup': 'Delivery and pickup operations'
+    };
+    return descriptions[roleName] || 'Custom role permissions';
   };
 
   // Calculate permission stats
@@ -114,7 +135,7 @@ const RBFM = () => {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-lg p-6 transform hover:scale-105 transition-all duration-300">
             <div className="flex items-center space-x-3">
               <div className="p-3 bg-indigo-100 rounded-xl">
@@ -122,7 +143,7 @@ const RBFM = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-800">{filteredRoles.length}</p>
-                <p className="text-slate-600">Active Roles</p>
+                <p className="text-slate-600 text-sm">Active Roles</p>
               </div>
             </div>
           </div>
@@ -136,7 +157,7 @@ const RBFM = () => {
                 <p className="text-2xl font-bold text-slate-800">
                   {filteredRoles.reduce((sum, role) => sum + role.permissions.filter(p => p.enabled).length, 0)}
                 </p>
-                <p className="text-slate-600">Active Permissions</p>
+                <p className="text-slate-600 text-sm">Active Permissions</p>
               </div>
             </div>
           </div>
@@ -150,7 +171,24 @@ const RBFM = () => {
                 <p className="text-2xl font-bold text-slate-800">
                   {filteredRoles.reduce((sum, role) => sum + role.permissions.length, 0)}
                 </p>
-                <p className="text-slate-600">Total Permissions</p>
+                <p className="text-slate-600 text-sm">Total Permissions</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-6 transform hover:scale-105 transition-all duration-300">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-amber-100 rounded-xl">
+                <Shield className="text-amber-600" size={24} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-800">
+                  {Math.round(filteredRoles.reduce((sum, role) => {
+                    const stats = getPermissionStats(role.permissions);
+                    return sum + stats.percentage;
+                  }, 0) / filteredRoles.length) || 0}%
+                </p>
+                <p className="text-slate-600 text-sm">Avg. Access Level</p>
               </div>
             </div>
           </div>
@@ -183,7 +221,10 @@ const RBFM = () => {
                       </div>
                       <div>
                         <h3 className="text-2xl font-bold text-white">{role.name}</h3>
-                        <p className="text-white/80">
+                        <p className="text-white/90 text-sm mb-1">
+                          {getRoleDescription(role.name)}
+                        </p>
+                        <p className="text-white/80 text-sm">
                           {stats.enabled} of {stats.total} permissions active
                         </p>
                       </div>
@@ -231,25 +272,35 @@ const RBFM = () => {
                 {/* Permissions List */}
                 <div 
                   className={`transition-all duration-500 ease-in-out overflow-hidden ${
-                    isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                    isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
                   }`}
                 >
                   <div className="p-6 space-y-4">
                     <h4 className="text-lg font-semibold text-slate-800 mb-4 flex items-center space-x-2">
                       <Key size={20} className="text-slate-600" />
                       <span>Permission Controls</span>
+                      <div className="ml-auto text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        {stats.enabled}/{stats.total} Active
+                      </div>
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {role.permissions.map((perm, permIndex) => (
                         <div
                           key={perm.tab}
-                          className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors duration-200"
+                          className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors duration-200 group"
                           style={{
                             animation: isExpanded ? `fadeInLeft 0.4s ease-out ${permIndex * 0.05}s both` : 'none'
                           }}
                         >
-                          <span className="text-slate-700 font-medium">{perm.label}</span>
+                          <div className="flex items-center space-x-3">
+                            <div className={`w-3 h-3 rounded-full transition-colors duration-200 ${
+                              perm.enabled ? 'bg-green-400' : 'bg-slate-300'
+                            }`}></div>
+                            <span className="text-slate-700 font-medium group-hover:text-slate-900 transition-colors">
+                              {perm.label}
+                            </span>
+                          </div>
 
                           {/* Enhanced Toggle Button */}
                           <button
@@ -293,9 +344,14 @@ const RBFM = () => {
         
         {filteredRoles.length === 0 && (
           <div className="text-center py-16">
-            <Shield size={64} className="text-slate-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-slate-600 mb-2">No Roles Found</h3>
-            <p className="text-slate-500">Create some roles to manage permissions</p>
+            <div className="bg-white rounded-2xl shadow-lg p-12 max-w-md mx-auto">
+              <Shield size={64} className="text-slate-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-600 mb-2">No Roles Found</h3>
+              <p className="text-slate-500 mb-6">Create some roles to manage permissions</p>
+              <button className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-6 py-2 rounded-lg hover:shadow-lg transition-all duration-200">
+                Create New Role
+              </button>
+            </div>
           </div>
         )}
       </div>
