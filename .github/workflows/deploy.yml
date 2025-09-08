@@ -1,0 +1,43 @@
+name: Deploy User Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Frontend to Server
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Deploy via SSH
+      - name: SSH and Deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: 69.62.73.169
+          username: deployer
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "🚀 Starting frontend deployment..."
+
+            # Navigate to frontend directory
+            cd /home/deployer/courier-f-admin
+
+            # Reset and pull latest code
+            git reset --hard
+            git pull origin main
+
+            # Install dependencies and build
+            npm install
+            npm run build
+
+            # Restart frontend PM2 process
+            pm2 restart courier-admin
+            pm2 save
+
+            echo "✅ Frontend deployment completed!"
