@@ -14,7 +14,8 @@ import {
   Percent,
   X,
   LogOut,
-  TrendingUp
+  TrendingUp,
+  SquaresExclude
 } from 'lucide-react';
 
 // Map string icon names from backend to Lucide icons
@@ -27,7 +28,8 @@ const ICONS = {
   Wallet,
   Plus,
   Percent,
-  TrendingUp
+  TrendingUp,
+  SquaresExclude
 };
 
 const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen }) => {

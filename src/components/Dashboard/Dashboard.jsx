@@ -13,6 +13,7 @@ import RateManagement from '@/components/RateManagement/RateManagement';
 import WalletCredits from '@/components/WalletCredit/WalletCredit';
 import Discounts from '@/components/DiscountManagement/DiscountManagement';
 import RBFM from '@/components/RBFM/RBFM';
+import Clubbing from '../Clubbing/Clubbing';
 
 /**
  * NOTE:
@@ -282,6 +283,7 @@ export default function DashboardContent() {
       case 'wallet': return <WalletCredits />;
       case 'discounts': return <Discounts />;
       case 'rbfm': return <RBFM />;
+      case 'clubbing': return <Clubbing />
       default: return <UserManagement />;
     }
   };
