@@ -70,11 +70,18 @@ const ManifestRequest = () => {
           handleMarkAsPickedUp(manifestExists._id);
         }
 
-        // Ignore NotFoundException errors
-        if (error && error.name !== 'NotFoundException') {
-          console.error('ZXing scan error:', error);
-          setScanError('Camera error. Please try again.');
-        }
+        if (error) {
+  // Ignore normal "not found" scanning errors
+  if (
+    error.name === 'NotFoundException' ||
+    error.message?.includes('No MultiFormat Readers')
+  ) {
+    return;
+  }
+
+  console.error('ZXing scan error:', error);
+  setScanError('Unable to scan. Try adjusting the barcode position.');
+}
       }
     );
   } catch (err) {
