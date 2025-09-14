@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import ScanAndClub from './ScanAndClub';
 import { motion } from 'framer-motion';
 import { 
   Package, 
@@ -9,6 +10,7 @@ import {
   Calendar, 
   User, 
   Phone,
+  ScanLine,
   DollarSign,
   Truck,
   Search,
@@ -40,6 +42,7 @@ const OrderManagement = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [expandedCards, setExpandedCards] = useState(new Set());
+  const [showScanAndClub, setShowScanAndClub] = useState(false);
   
   // Clubbing functionality state
   const [selectedOrders, setSelectedOrders] = useState([]);
@@ -453,26 +456,35 @@ const OrderManagement = () => {
       className="space-y-4 sm:space-y-6"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          {selectedOrders.length > 0 && (
-            <button 
-              onClick={() => setShowClubbingModal(true)}
-              className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
-            >
-              <Users size={isMobile ? 14 : 16} />
-              <span className="hidden sm:inline">Club Selected</span>
-              <span className="sm:hidden">Club</span>
-              <span>({selectedOrders.length})</span>
-            </button>
-          )}
-          <button className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
-            <Download size={isMobile ? 14 : 16} />
-            <span className="hidden sm:inline">Export</span>
-          </button>
-        </div>
-      </div>
+<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
+  <div className="flex items-center space-x-2 sm:space-x-3">
+    {selectedOrders.length > 0 && (
+      <button 
+        onClick={() => setShowClubbingModal(true)}
+        className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
+      >
+        <Users size={isMobile ? 14 : 16} />
+        <span className="hidden sm:inline">Club Selected</span>
+        <span className="sm:hidden">Club</span>
+        <span>({selectedOrders.length})</span>
+      </button>
+    )}
+    {/* New Scan & Club Button */}
+    <button 
+      onClick={() => setShowScanAndClub(true)}
+      className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
+    >
+      <ScanLine size={isMobile ? 14 : 16} />
+      <span className="hidden sm:inline">Scan & Club</span>
+      <span className="sm:hidden">Scan</span>
+    </button>
+    <button className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
+      <Download size={isMobile ? 14 : 16} />
+      <span className="hidden sm:inline">Export</span>
+    </button>
+  </div>
+</div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
@@ -848,6 +860,17 @@ const OrderManagement = () => {
           </motion.div>
         </div>
       )}
+
+      {/* Scan & Club Modal */}
+<ScanAndClub
+  isOpen={showScanAndClub}
+  onClose={() => setShowScanAndClub(false)}
+  orders={orders}
+  onClubSuccess={() => {
+    fetchOrders(); // Refresh orders list
+    setShowScanAndClub(false);
+  }}
+/>
     </motion.div>
   );
 };
