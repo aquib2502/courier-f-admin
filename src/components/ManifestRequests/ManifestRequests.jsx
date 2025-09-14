@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { DecodeHintType, BarcodeFormat } from '@zxing/library';
 import { 
   FileText, 
   Calendar, 
@@ -26,9 +28,73 @@ const ManifestRequest = () => {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [scanningManifest, setScanningManifest] = useState(null);
-  const [scanInput, setScanInput] = useState('');
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [scanInput, setScanInput] = useState('');
+
+  const videoRef = useRef(null);
+  const codeReaderRef = useRef(null);
+
+  const startBarcodeScan = async () => {
+  setScanError('');
+
+  if (!codeReaderRef.current) {
+    const hints = new Map();
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128]);
+    codeReaderRef.current = new BrowserMultiFormatReader(hints);
+  }
+
+  try {
+    await codeReaderRef.current.decodeFromVideoDevice(
+      null,
+      videoRef.current,
+      (result, error) => {
+        if (result) {
+          const scannedId = result.getText();
+
+          // ✅ Properly stop decoding
+          try { codeReaderRef.current.stopContinuousDecode(); } catch (_) {}
+          try { codeReaderRef.current.stopStreams(); } catch (_) {}
+
+          const manifestExists = manifests.find(
+            (m) =>
+              (m._id === scannedId || m.manifestId === scannedId) &&
+              m.status === 'pickup_requested'
+          );
+
+          if (!manifestExists) {
+            setScanError('Manifest not found or not ready for pickup');
+            return;
+          }
+
+          handleMarkAsPickedUp(manifestExists._id);
+        }
+
+        // Ignore NotFoundException errors
+        if (error && error.name !== 'NotFoundException') {
+          console.error('ZXing scan error:', error);
+          setScanError('Camera error. Please try again.');
+        }
+      }
+    );
+  } catch (err) {
+    console.error('Failed to start scanning:', err);
+    setScanError('Unable to access camera. Check permissions.');
+  }
+};
+
+// Stop scanner when modal closes
+useEffect(() => {
+  if (!scanningManifest && codeReaderRef.current) {
+    try { codeReaderRef.current.stopContinuousDecode(); } catch (_) {}
+    try { codeReaderRef.current.stopStreams(); } catch (_) {}
+  }
+}, [scanningManifest]);
+
+useEffect(() => {
+  if (scanningManifest) startBarcodeScan();
+}, [scanningManifest]);
+
 
   useEffect(() => {
     fetchManifests();
@@ -403,102 +469,39 @@ const ManifestRequest = () => {
       )}
 
       {/* Scanning Modal */}
-      <AnimatePresence>
+            <AnimatePresence>
         {scanningManifest && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6"
-            >
+          <motion.div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
               <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                  <Camera size={20} className="text-blue-600" />
-                  <h3 className="text-lg font-semibold text-slate-800">Scan Manifest for Pickup</h3>
-                </div>
+                <h3 className="text-lg font-semibold text-slate-800">
+                  Scan Manifest for Pickup
+                </h3>
                 <button
                   onClick={() => {
                     setScanningManifest(null);
-                    setScanInput('');
                     setScanError('');
                   }}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="p-2 hover:bg-slate-100 rounded-lg"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleScanSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Manifest ID
-                  </label>
-                  <input
-                    type="text"
-                    value={scanInput}
-                    onChange={(e) => {
-                      setScanInput(e.target.value);
-                      setScanError('');
-                    }}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Enter or scan manifest ID"
-                    autoFocus
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    Enter the manifest ID that is ready for pickup (status: pickup_requested)
-                  </p>
+              {/* Live video feed */}
+              <div className="w-full aspect-video bg-black rounded-lg overflow-hidden mb-4">
+                <video ref={videoRef} className="w-full h-full object-cover" />
+              </div>
+
+              {scanError && (
+                <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle size={16} className="text-red-600" />
+                  <p className="text-sm text-red-700">{scanError}</p>
                 </div>
+              )}
 
-                {scanError && (
-                  <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <AlertCircle size={16} className="text-red-600" />
-                    <p className="text-sm text-red-700">{scanError}</p>
-                  </div>
-                )}
-
-                <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setScanningManifest(null);
-                      setScanInput('');
-                      setScanError('');
-                    }}
-                    className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={scanLoading}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                  >
-                    {scanLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check size={16} />
-                        <span>Mark as Picked Up</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-700">
-                  <strong>Note:</strong> Enter the manifest ID to mark the entire manifest as picked up. 
-                  This will update the manifest status to "picked_up" and mark all linked orders as "Shipped" with manifestStatus "dispatched".
-                </p>
+              <div className="mt-4 text-sm text-slate-500">
+                Point your camera at the barcode. The system will automatically mark it as picked up.
               </div>
             </motion.div>
           </motion.div>
