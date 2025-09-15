@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Menu, Bell, Search } from 'lucide-react';
+import { Menu, Bell, Search, Save, StickyNote } from 'lucide-react';
 
 import Sidebar from '@/components/Layout/SideBar';
 import UserManagement from '@/components/UserManagement/UserManagement';
@@ -15,6 +15,8 @@ import WalletCredits from '@/components/WalletCredit/WalletCredit';
 import Discounts from '@/components/DiscountManagement/DiscountManagement';
 import RBFM from '@/components/RBFM/RBFM';
 import Clubbing from '../Clubbing/Clubbing';
+import axios from 'axios';
+import { toast, ToastContainer } from 'react-toastify';
 
 /**
  * Dashboard Home Component with Mobile Responsive Design
@@ -22,180 +24,305 @@ import Clubbing from '../Clubbing/Clubbing';
 const Dashboard = () => {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [note, setNote] = useState('');
+  const [title, setTitle] = useState('');
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [orderData, setOrderData] = useState(null);
   
-  useEffect(() => {
-    // TODO: Replace with actual API call
-    // Mock data for demo with mobile-optimized structure
-    setTimeout(() => {
-      setStats([
-        { 
-          label: 'Total Orders', 
-          value: '1,234', 
-          change: '+12%', 
+  const fetchOrdersData = async () => {
+  try {
+    setLoading(true);
+    const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`);
+
+    if (response.status === 200 && response.data?.data) {
+      const orders = response.data.data; // <-- Array of orders
+
+      // Total orders count
+      const totalOrders = orders.length;
+
+      // Create counts for each status
+      const statuses = [
+        'Drafts',
+        'Ready',
+        'Packed',
+        'Manifested',
+        'Shipped',
+        'Delivered',
+        'Cancelled',
+        'Refunded',
+      ];
+
+      const statusCounts = statuses.reduce((acc, status) => {
+        acc[status] = orders.filter(order => order.orderStatus === status).length;
+        return acc;
+      }, {});
+
+      // Update state
+      setOrderData({ totalOrders, statusCounts });
+
+      // Update stats cards
+      const processedStats = [
+        {
+          label: 'Total Orders',
+          value: totalOrders,
+          change: '+12%',
           color: 'bg-blue-500',
           isPositive: true,
-          icon: '📦'
+          icon: '📦',
         },
-        { 
-          label: 'Pending Orders', 
-          value: '56', 
-          change: '-5%', 
-          color: 'bg-yellow-500',
-          isPositive: false,
-          icon: '⏳'
-        },
-        { 
-          label: 'Completed Orders', 
-          value: '1,178', 
-          change: '+8%', 
+        {
+          label: 'Ready/Packed Orders',
+          value: statusCounts.Ready + statusCounts.Packed,
+          change: '+8%',
           color: 'bg-green-500',
           isPositive: true,
-          icon: '✅'
+          icon: '✅',
         },
-        { 
-          label: 'Total Revenue', 
-          value: '₹45,678', 
-          change: '+15%', 
+        {
+          label: 'Shipped Orders',
+          value: statusCounts.Shipped,
+          change: '+15%',
           color: 'bg-purple-500',
           isPositive: true,
-          icon: '💰'
-        }
-      ]);
-      setLoading(false);
-    }, 1000);
+          icon: '🚚',
+        },
+        {
+          label: 'Manifested Orders',
+          value: statusCounts.Manifested,
+          change: '-5%',
+          color: 'bg-yellow-500',
+          isPositive: false,
+          icon: '⏳',
+        },
+      ];
+
+      setStats(processedStats);
+    }
+  } catch (error) {
+    console.error('Error fetching orders data:', error);
+    toast.error('Failed to fetch orders data');
+
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  useEffect(() => {
+    fetchOrdersData();
   }, []);
+
+  const addNote = async () => {
+    if (!note.trim() || !title.trim()) {
+      toast.warning('Please enter both title and note content');
+      return;
+    }
+
+    try {
+      setNoteLoading(true);
+      const response = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/addnote`, {
+        content: note,
+        title
+      });
+
+      if (response.status === 201) {
+        toast.success('Note added successfully');
+        setNote('');
+        setTitle('');
+      } else {
+        toast.info('Note submitted successfully');
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Error adding note');
+      console.error('Error adding note:', error?.response?.data?.message || error.message);
+    } finally {
+      setNoteLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      addNote();
+    }
+  };
 
   if (loading) {
     return (
-      <div className="space-y-4 sm:space-y-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Dashboard</h1>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-          {[...Array(4)].map((_, index) => (
-            <div key={index} className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-lg animate-pulse">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2 flex-1">
-                  <div className="h-3 sm:h-4 bg-slate-200 rounded w-3/4"></div>
-                  <div className="h-4 sm:h-6 bg-slate-200 rounded w-1/2"></div>
-                  <div className="h-2 sm:h-3 bg-slate-200 rounded w-1/3"></div>
+      <div className="min-h-screen bg-gray-50 p-3 sm:p-4 lg:p-6">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800">Dashboard</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="bg-white p-4 sm:p-6 rounded-xl shadow-lg animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2 flex-1">
+                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                    <div className="h-6 bg-slate-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-slate-200 rounded w-1/3"></div>
+                  </div>
+                  <div className="w-10 h-10 lg:w-12 lg:h-12 bg-slate-200 rounded-xl flex-shrink-0"></div>
                 </div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-slate-200 rounded-lg sm:rounded-xl flex-shrink-0"></div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-4 sm:space-y-6"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Dashboard</h1>
-        <div className="text-xs sm:text-sm text-slate-600 hidden sm:block">
-          Last updated: {new Date().toLocaleString()}
-        </div>
-        {/* Mobile timestamp */}
-        <div className="text-xs text-slate-600 sm:hidden">
-          {new Date().toLocaleDateString()}
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      <ToastContainer 
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        className="z-50"
+      />
       
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        {stats.map((stat, index) => (
+      <div className="p-3 sm:p-4 lg:p-6">
+        <div className="max-w-7xl mx-auto">
           <motion.div
-            key={index}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl sm:rounded-2xl shadow-lg hover:shadow-xl transition-shadow"
+            className="space-y-4 sm:space-y-6 lg:space-y-8"
           >
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="text-slate-600 text-xs sm:text-sm mb-1 truncate">{stat.label}</p>
-                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-slate-800 mb-1 truncate">{stat.value}</p>
-                <p className={`text-xs sm:text-sm font-medium truncate ${
-                  stat.isPositive ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  <span className="hidden sm:inline">{stat.change} from last month</span>
-                  <span className="sm:hidden">{stat.change}</span>
-                </p>
-              </div>
-              <div className={`w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 ${stat.color} rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0 ml-2`}>
-                <span className="text-base sm:text-lg lg:text-xl">{stat.icon}</span>
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800">Dashboard</h1>
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600">
+                <span className="hidden sm:inline">Last updated:</span>
+                <span>{new Date().toLocaleString()}</span>
               </div>
             </div>
-          </motion.div>
-        ))}
-      </div>
+            
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+              {stats.map((stat, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="bg-white p-4 sm:p-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1 mr-3">
+                      <p className="text-slate-600 text-xs sm:text-sm mb-2 font-medium">{stat.label}</p>
+                      <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2">{stat.value}</p>
+                      <p className={`text-xs sm:text-sm font-medium flex items-center gap-1 ${
+                        stat.isPositive ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        <span>{stat.isPositive ? '↗' : '↘'}</span>
+                        <span className="hidden sm:inline">{stat.change} from last month</span>
+                        <span className="sm:hidden">{stat.change}</span>
+                      </p>
+                    </div>
+                    <div className={`w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 ${stat.color} rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                      <span className="text-lg sm:text-xl lg:text-2xl">{stat.icon}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
 
-      {/* Recent Activity Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-6 sm:mt-8">
-        {/* Recent Orders */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6"
-        >
-          <h3 className="text-base sm:text-lg font-semibold text-slate-800 mb-3 sm:mb-4">Recent Orders</h3>
-          <div className="space-y-2 sm:space-y-3">
-            {[
-              { id: 'ORD001', customer: 'John Doe', status: 'In Transit', amount: '₹250' },
-              { id: 'ORD002', customer: 'Jane Smith', status: 'Delivered', amount: '₹180' },
-              { id: 'ORD003', customer: 'Bob Wilson', status: 'Pending', amount: '₹320' },
-            ].map((order) => (
-              <div key={order.id} className="flex items-center justify-between p-2 sm:p-3 hover:bg-slate-50 rounded-lg transition-colors">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-800 text-sm sm:text-base truncate">{order.id}</p>
-                  <p className="text-xs sm:text-sm text-slate-600 truncate">{order.customer}</p>
-                </div>
-                <div className="text-right flex-shrink-0 ml-2">
-                  <p className="font-medium text-slate-800 text-sm sm:text-base">{order.amount}</p>
-                  <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${
-                    order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
-                    order.status === 'In Transit' ? 'bg-blue-100 text-blue-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Quick Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6"
-        >
-          <h3 className="text-base sm:text-lg font-semibold text-slate-800 mb-3 sm:mb-4">Quick Actions</h3>
-          <div className="grid grid-cols-1 gap-2 sm:gap-3">
-            {[
-              { label: 'Add New Order', color: 'bg-blue-600', href: '/add-order' },
-              { label: 'Manage Users', color: 'bg-green-600', href: '/users' },
-              { label: 'View Reports', color: 'bg-purple-600', href: '/reports' },
-              { label: 'Settings', color: 'bg-slate-600', href: '/settings' },
-            ].map((action, index) => (
-              <button
-                key={index}
-                className={`w-full ${action.color} text-white p-2.5 sm:p-3 rounded-lg sm:rounded-xl hover:opacity-90 active:opacity-80 transition-opacity font-medium text-sm sm:text-base`}
+            {/* Order Status Breakdown
+            {orderData && orderData.statusCounts && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="bg-white rounded-xl shadow-lg p-4 sm:p-6"
               >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        </motion.div>
+                <h3 className="text-lg sm:text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                  <span>📊</span>
+                  Order Status Breakdown
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {['Drafts', 'Ready', 'Packed', 'Manifested', 'Shipped', 'Delivered', 'Cancelled', 'Refunded'].map((status) => (
+                    <div key={status} className="bg-gray-50 p-3 sm:p-4 rounded-lg text-center hover:bg-gray-100 transition-colors">
+                      <p className="text-lg sm:text-xl font-bold text-slate-800">{orderData.statusCounts[status] || 0}</p>
+                      <p className="text-xs sm:text-sm text-slate-600 font-medium">{status}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )} */}
+
+            {/* Notes Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-white rounded-xl shadow-lg p-4 sm:p-6"
+            >
+              <h3 className="text-lg sm:text-xl font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <StickyNote className="w-5 h-5" />
+                Add Note
+              </h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="note-title" className="block text-sm font-medium text-slate-700">
+                    Note Title
+                  </label>
+                  <input
+                    id="note-title"
+                    type="text"
+                    placeholder="Enter note title..."
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm sm:text-base"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label htmlFor="note-content" className="block text-sm font-medium text-slate-700">
+                    Note Content
+                  </label>
+                  <textarea
+                    id="note-content"
+                    placeholder="Enter your note here..."
+                    rows={4}
+                    className="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical text-sm sm:text-base"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Tip: Press Ctrl+Enter to save quickly
+                  </p>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={addNote}
+                  disabled={noteLoading || !note.trim() || !title.trim()}
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-medium text-sm sm:text-base transition-all duration-200 flex items-center justify-center gap-2 min-w-[120px]"
+                >
+                  {noteLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Note
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
