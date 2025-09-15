@@ -491,18 +491,18 @@ const OrderManagement = () => {
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-lg">
           <div className="text-lg sm:text-2xl font-bold text-slate-800">{orders.length}</div>
           <div className="text-xs sm:text-sm text-slate-600">Total</div>
-        </div>
+        </div>  
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-lg">
           <div className="text-lg sm:text-2xl font-bold text-yellow-600">
-            {orders.filter(o => o.orderStatus?.toLowerCase() === 'pending').length}
+            {orders.filter(o => o.orderStatus?.toLowerCase() === 'ready').length}
           </div>
-          <div className="text-xs sm:text-sm text-slate-600">Pending</div>
+          <div className="text-xs sm:text-sm text-slate-600">Ready</div>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-lg">
           <div className="text-lg sm:text-2xl font-bold text-blue-600">
-            {orders.filter(o => o.orderStatus?.toLowerCase() === 'in transit').length}
+            {orders.filter(o => o.orderStatus?.toLowerCase() === 'shipped').length}
           </div>
-          <div className="text-xs sm:text-sm text-slate-600">In Transit</div>
+          <div className="text-xs sm:text-sm text-slate-600">Shipped</div>
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-lg">
           <div className="text-lg sm:text-2xl font-bold text-green-600">
@@ -512,9 +512,9 @@ const OrderManagement = () => {
         </div>
         <div className="bg-white p-3 sm:p-4 rounded-xl shadow-lg">
           <div className="text-lg sm:text-2xl font-bold text-purple-600">
-            {orders.filter(o => o.orderStatus?.toLowerCase() === 'processing').length}
+            {orders.filter(o => o.orderStatus?.toLowerCase() === 'manifested').length}
           </div>
-          <div className="text-xs sm:text-sm text-slate-600">Processing</div>
+          <div className="text-xs sm:text-sm text-slate-600">Manifested</div>
         </div>
       </div>
 
