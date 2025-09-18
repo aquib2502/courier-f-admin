@@ -61,8 +61,8 @@
       setLoading(true);
       try {
         const [ordersRes, manifestsRes] = await Promise.all([
-          fetch("http://localhost:5000/api/orders/total"),
-          fetch("http://localhost:5000/api/manifests/getallmanifest")
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/getallmanifest`)
         ]);
 
         const ordersData = await ordersRes.json();
@@ -186,7 +186,7 @@
     const clientId = selectedOrder?.user?._id || null;
     const finalDisputeType = disputeType === "other" ? otherTypeText : disputeType;
 
-    const response = await fetch("http://localhost:5000/api/admin/raise-dispute", {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/raise-dispute`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
