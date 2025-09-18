@@ -17,6 +17,7 @@ import RBFM from '@/components/RBFM/RBFM';
 import Clubbing from '../Clubbing/Clubbing';
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
+import DisputeForm from '../Dispute/Dispute';
 
 /**
  * Dashboard Home Component with Mobile Responsive Design
@@ -413,6 +414,7 @@ export default function DashboardContent() {
       case 'discounts': return <Discounts />;
       case 'rbfm': return <RBFM />;
       case 'clubbing': return <Clubbing />
+      case 'dispute': return <DisputeForm />
       default: return <UserManagement />;
     }
   };
