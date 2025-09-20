@@ -2,7 +2,7 @@
 
   import React, { useState, useEffect } from "react";
   import { Search, Filter, ChevronLeft, ChevronRight, FileText, Package, AlertTriangle, Calendar, User, X, Truck, Clock, Shield } from "lucide-react";
-
+import axios from 'axios'
   const disputeTypes = [
     { value: "weight_discrepancy", label: "Weight Discrepancy", icon: "⚖️" },
     { value: "missing_parcel", label: "Missing Parcel", icon: "📦" },
@@ -57,38 +57,47 @@
       fetchData();
     }, [token]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [ordersRes, manifestsRes] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`),
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/getallmanifest`)
-        ]);
+    console.log(process.env.NEXT_PUBLIC_API_URL);
 
-        const ordersData = await ordersRes.json();
-        const manifestsData = await manifestsRes.json();
 
-        const allOrders = ordersData.data || [];
-        const allManifests = manifestsData.data || [];
 
-        setOrders(allOrders);
-        setManifests(allManifests);
+const fetchData = async () => {
+  setLoading(true);
+  try {
+    // Make both API calls in parallel using axios
+    const [ordersRes, manifestsRes] = await Promise.all([
+      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`),
+      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/manifests/getallmanifest`),
+    ]);
 
-        // Filter eligible orders and manifests
-        const eligibleOrders = allOrders.filter(
-          (o) => o.orderStatus === "Shipped" && o.manifestStatus === "dispatched"
-        );
-        const eligibleManifests = allManifests.filter((m) => m.status === "picked_up");
+    // Extract data
+    const allOrders = ordersRes?.data?.data || [];
+    const allManifests = manifestsRes?.data?.data || [];
 
-        setFilteredOrders(eligibleOrders);
-        setFilteredManifests(eligibleManifests);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        alert("Failed to fetch data");
-      } finally {
-        setLoading(false);
-      }
-    };
+    setOrders(allOrders);
+    setManifests(allManifests);
+
+    // Filter eligible orders
+    const eligibleOrders = allOrders.filter(
+      (o) => o.orderStatus === "Shipped" && o.manifestStatus === "dispatched"
+    );
+
+    // Filter eligible manifests
+    const eligibleManifests = allManifests.filter(
+      (m) => m.status === "picked_up"
+    );
+
+    setFilteredOrders(eligibleOrders);
+    setFilteredManifests(eligibleManifests);
+
+  } catch (err) {
+    console.error("Error fetching data:", err);
+    alert("Failed to fetch data");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
     // Apply filters to orders
     useEffect(() => {
