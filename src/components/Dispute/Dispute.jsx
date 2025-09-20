@@ -49,13 +49,13 @@ import axios from 'axios'
     const [description, setDescription] = useState("");
     const [showDisputeForm, setShowDisputeForm] = useState(false);
 
-    const token = typeof window !== "undefined" ? localStorage.getItem("userToken") : null;
+    // const token = typeof window !== "undefined" ? localStorage.getItem("userToken") : null;
 
-    // Fetch data on component mount
-    useEffect(() => {
-      if (!token) return;
-      fetchData();
-    }, [token]);
+    // // Fetch data on component mount
+    // useEffect(() => {
+    //   if (!token) return;
+    //   fetchData();
+    // }, [token]);
 
     console.log(process.env.NEXT_PUBLIC_API_URL);
 
@@ -97,6 +97,10 @@ const fetchData = async () => {
     setLoading(false);
   }
 };
+
+useEffect(()=>{
+fetchData()
+}, [])
 
 
     // Apply filters to orders
