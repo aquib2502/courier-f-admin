@@ -205,12 +205,13 @@ fetchData()
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        orderId: selectedOrder?._id || null,
-        manifestId: selectedManifest?._id || null,
-        type: finalDisputeType,
-        description,
-        clientId,
-      }),
+  orderIds: selectedOrder ? [selectedOrder._id] : [],
+  manifestId: selectedManifest?._id || null,
+  type: finalDisputeType,
+  description,
+  clientId,
+}),
+
     });
 
     if (response.ok) {
@@ -711,7 +712,7 @@ fetchData()
 
         {/* Dispute Form Modal */}
         {showDisputeForm && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+  <div className="fixed inset-0  bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
     <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 sm:p-8">
       
       {/* Modal Header */}
