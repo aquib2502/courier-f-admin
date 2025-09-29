@@ -1,380 +1,475 @@
-'use client';
-
 import React, { useState, useEffect } from 'react';
+import { Search, Download, FileText, DollarSign, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { motion } from 'framer-motion';
-import { 
-  CreditCard, 
-  ArrowUpCircle, 
-  ArrowDownCircle, 
-  Calendar, 
-  User, 
-  Search, 
-  Filter, 
-  Download,
-  Eye,
-  TrendingUp,
-  TrendingDown
-} from 'lucide-react';
 
 const TransactionManagement = () => {
   const [transactions, setTransactions] = useState([]);
+  const [filteredTransactions, setFilteredTransactions] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [notification, setNotification] = useState(null);
+  const [userDropdowns, setUserDropdowns] = useState({});
 
   useEffect(() => {
     fetchTransactions();
   }, []);
 
+  useEffect(() => {
+    filterTransactions();
+  }, [transactions, searchTerm, statusFilter]);
+
   const fetchTransactions = async () => {
-    // TODO: Replace with actual API call
-    // try {
-    //   const response = await axios.get('/api/transactions');
-    //   setTransactions(response.data);
-    // } catch (error) {
-    //   console.error('Failed to fetch transactions:', error);
-    // } finally {
-    //   setLoading(false);
-    // }
-    
-    // Mock data
-    setTimeout(() => {
-      setTransactions([
-        { 
-          id: 'TXN001', 
-          user: 'John Doe',
-          userEmail: 'john@example.com',
-          orderId: 'ORD001',
-          type: 'payment', 
-          amount: 250, 
-          status: 'completed', 
-          date: '2024-01-15T14:30:00',
-          paymentMethod: 'Credit Card',
-          transactionFee: 5,
-          netAmount: 245
-        },
-        { 
-          id: 'TXN002', 
-          user: 'Jane Smith',
-          userEmail: 'jane@example.com',
-          orderId: 'ORD002',
-          type: 'refund', 
-          amount: 80, 
-          status: 'pending', 
-          date: '2024-01-14T10:15:00',
-          paymentMethod: 'Wallet',
-          transactionFee: 0,
-          netAmount: 80
-        },
-        { 
-          id: 'TXN003', 
-          user: 'Bob Wilson',
-          userEmail: 'bob@example.com',
-          orderId: 'ORD003',
-          type: 'payment', 
-          amount: 320, 
-          status: 'failed', 
-          date: '2024-01-16T16:45:00',
-          paymentMethod: 'UPI',
-          transactionFee: 6.4,
-          netAmount: 313.6
-        },
-        { 
-          id: 'TXN004', 
-          user: 'Alice Brown',
-          userEmail: 'alice@example.com',
-          orderId: 'ORD004',
-          type: 'wallet_credit', 
-          amount: 500, 
-          status: 'completed', 
-          date: '2024-01-13T09:20:00',
-          paymentMethod: 'Bank Transfer',
-          transactionFee: 0,
-          netAmount: 500
-        },
-        { 
-          id: 'TXN005', 
-          user: 'Charlie Davis',
-          userEmail: 'charlie@example.com',
-          orderId: 'ORD005',
-          type: 'payment', 
-          amount: 195, 
-          status: 'completed', 
-          date: '2024-01-12T12:30:00',
-          paymentMethod: 'Debit Card',
-          transactionFee: 3.9,
-          netAmount: 191.1
-        }
-      ]);
+    try {
+      setLoading(true);
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/getAllTransactions`);
+      if (response.data.success) {
+        setTransactions(response.data.data || []);
+      }
+    } catch (error) {
+      showNotification('Failed to fetch transactions', 'error');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const filteredTransactions = transactions.filter(transaction => {
-    const matchesSearch = transaction.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         transaction.orderId.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || transaction.type === filterType;
-    const matchesStatus = filterStatus === 'all' || transaction.status === filterStatus;
-    return matchesSearch && matchesType && matchesStatus;
-  });
+  const filterTransactions = () => {
+    let filtered = [...(transactions || [])];
+
+    if (searchTerm) {
+      filtered = filtered.filter(txn =>
+        txn.user?.fullname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        txn.user?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(txn => txn.status === statusFilter);
+    }
+
+    setFilteredTransactions(filtered);
+  };
+
+  const groupByUser = () => {
+    const grouped = {};
+    filteredTransactions.forEach(txn => {
+      const userId = txn.user?._id || 'unknown';
+      if (!grouped[userId]) {
+        grouped[userId] = {
+          user: txn.user,
+          transactions: []
+        };
+      }
+      grouped[userId].transactions.push(txn);
+    });
+    return grouped;
+  };
+
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const calculateBreakdown = (amount, type) => {
+    if (type === 'order-booking') {
+      const gstRate = 0.18;
+      const basePrice = amount / (1 + gstRate);
+      const gst = amount - basePrice;
+      return { basePrice, gst, total: amount };
+    }
+    return { basePrice: amount, gst: 0, total: amount };
+  };
+
+  const exportToPDF = (transactionsToExport, title = "Transactions") => {
+    try {
+      const doc = new jsPDF("p", "pt", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(title, pageWidth / 2, 30, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(
+        `Generated on: ${new Date().toLocaleString()}`,
+        pageWidth / 2,
+        45,
+        { align: "center" }
+      );
+
+      const tableData = transactionsToExport.map((txn) => {
+        const txnType = txn.type || "wallet-topup";
+        const breakdown = calculateBreakdown(txn.amount || 0, txnType);
+
+        const amountText =
+          txnType === "order-booking"
+            ? `Base: Rs. ${breakdown.basePrice.toFixed(2)} | GST: Rs. ${breakdown.gst.toFixed(2)} | Total: Rs. ${breakdown.total.toFixed(2)}`
+            : `Rs. ${(txn.amount || 0).toFixed(2)}`;
+
+        return [
+          txn.user?.fullname || "N/A",
+          txn.user?.mobile || "N/A",
+          txn.merchantOrderId || "N/A",
+          txnType === "wallet-topup" ? "Wallet Top-up" : "Order Booking",
+          amountText,
+          txn.createdAt ? new Date(txn.createdAt).toLocaleString() : "N/A",
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 60,
+        head: [["Name", "Mobile", "Order ID", "Type", "Amount", "Date"]],
+        body: tableData,
+        styles: {
+          fontSize: 9,
+          cellPadding: 3,
+          overflow: "linebreak",
+          valign: "middle",
+        },
+        headStyles: {
+          fillColor: [59, 130, 246],
+          textColor: 255,
+          fontStyle: "bold",
+          halign: "center",
+        },
+        bodyStyles: { halign: "center" },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          0: { cellWidth: 90 },
+          1: { cellWidth: 80 },
+          2: { cellWidth: 100 },
+          3: { cellWidth: 80 },
+          4: { cellWidth: 120 },
+          5: { cellWidth: "auto" },
+        },
+        didDrawPage: () => {
+          const pageCount = doc.internal.getNumberOfPages();
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+            pageWidth - 60,
+            pageHeight - 20
+          );
+        },
+      });
+
+      doc.save(`${title.replace(/\s+/g, "_")}_${Date.now()}.pdf`);
+      showNotification("PDF exported successfully!", "success");
+    } catch (error) {
+      console.error(error);
+      showNotification("Failed to export PDF", "error");
+    }
+  };
+
+  const getSummary = () => {
+    const txnList = transactions || [];
+    const total = txnList.length;
+    const pending = txnList.filter(t => t.status === 'PENDING').length;
+    const completed = txnList.filter(t => t.status === 'COMPLETED').length;
+    const refunded = txnList.filter(t => t.status === 'REFUNDED').length;
+    const revenue = txnList
+      .filter(t => t.status === 'COMPLETED')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    return { total, pending, completed, refunded, revenue };
+  };
+
+  const summary = getSummary();
+
+  const formatDate = (date) => {
+    return new Date(date).toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-slate-100 text-slate-800';
+      case 'COMPLETED': return 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+      case 'PENDING': return 'bg-amber-100 text-amber-700 border border-amber-200';
+      case 'REFUNDED': return 'bg-rose-100 text-rose-700 border border-rose-200';
+      default: return 'bg-gray-100 text-gray-700 border border-gray-200';
     }
   };
-
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'payment': return 'text-blue-600';
-      case 'refund': return 'text-orange-600';
-      case 'wallet_credit': return 'text-green-600';
-      default: return 'text-slate-600';
-    }
-  };
-
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'payment': return <ArrowUpCircle size={16} className="text-blue-600" />;
-      case 'refund': return <ArrowDownCircle size={16} className="text-orange-600" />;
-      case 'wallet_credit': return <TrendingUp size={16} className="text-green-600" />;
-      default: return <CreditCard size={16} className="text-slate-600" />;
-    }
-  };
-
-  const totalRevenue = transactions
-    .filter(t => t.type === 'payment' && t.status === 'completed')
-    .reduce((sum, t) => sum + t.netAmount, 0);
-
-  const totalRefunds = transactions
-    .filter(t => t.type === 'refund' && t.status === 'completed')
-    .reduce((sum, t) => sum + t.amount, 0);
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-slate-800">Transaction Management</h1>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, index) => (
-            <div key={index} className="bg-white p-4 rounded-xl shadow-lg animate-pulse">
-              <div className="h-8 bg-slate-200 rounded mb-2"></div>
-              <div className="h-4 bg-slate-200 rounded w-20"></div>
-            </div>
-          ))}
-        </div>
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="space-y-4">
-            {[...Array(5)].map((_, index) => (
-              <div key={index} className="animate-pulse border-b border-slate-200 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="h-4 bg-slate-200 rounded w-24"></div>
-                    <div className="h-3 bg-slate-200 rounded w-32"></div>
-                  </div>
-                  <div className="h-6 bg-slate-200 rounded w-16"></div>
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading transactions...</p>
         </div>
       </div>
     );
   }
 
+  const groupedTransactions = groupByUser();
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">Transaction Management</h1>
-        <div className="flex items-center space-x-3">
-          <button className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2">
-            <Download size={16} />
-            <span>Export</span>
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-3 sm:p-4 md:p-6 lg:p-8">
+      {notification && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className={`fixed top-4 right-4 left-4 sm:left-auto sm:right-4 z-50 px-4 sm:px-6 py-3 rounded-xl shadow-2xl ${
+            notification.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+          } text-white font-medium`}>
+          {notification.message}
+        </motion.div>
+      )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Total Revenue</p>
-              <p className="text-2xl font-bold text-green-600">₹{totalRevenue.toFixed(2)}</p>
-            </div>
-            <TrendingUp size={24} className="text-green-600" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Total Refunds</p>
-              <p className="text-2xl font-bold text-orange-600">₹{totalRefunds.toFixed(2)}</p>
-            </div>
-            <TrendingDown size={24} className="text-orange-600" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Completed</p>
-              <p className="text-2xl font-bold text-slate-800">
-                {transactions.filter(t => t.status === 'completed').length}
-              </p>
-            </div>
-            <CreditCard size={24} className="text-green-600" />
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Pending</p>
-              <p className="text-2xl font-bold text-slate-800">
-                {transactions.filter(t => t.status === 'pending').length}
-              </p>
-            </div>
-            <CreditCard size={24} className="text-yellow-600" />
-          </div>
-        </div>
-      </div>
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 sm:mb-8"
+        >
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">Transaction Management</h1>
+          <p className="text-sm sm:text-base text-gray-600">Monitor and manage all transactions</p>
+        </motion.div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-            />
-          </div>
-          <div className="relative">
-            <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="bg-white rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Total</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.total}</p>
+              </div>
+              <div className="bg-blue-50 p-2 sm:p-3 rounded-lg">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ delay: 0.1 }} 
+            className="bg-white rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Pending</p>
+                <p className="text-xl sm:text-2xl font-bold text-amber-600">{summary.pending}</p>
+              </div>
+              <div className="bg-amber-50 p-2 sm:p-3 rounded-lg">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ delay: 0.2 }} 
+            className="bg-white rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Completed</p>
+                <p className="text-xl sm:text-2xl font-bold text-emerald-600">{summary.completed}</p>
+              </div>
+              <div className="bg-emerald-50 p-2 sm:p-3 rounded-lg">
+                <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ delay: 0.3 }} 
+            className="bg-white rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow border border-gray-100"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Refunded</p>
+                <p className="text-xl sm:text-2xl font-bold text-rose-600">{summary.refunded}</p>
+              </div>
+              <div className="bg-rose-50 p-2 sm:p-3 rounded-lg">
+                <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-rose-600" />
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            transition={{ delay: 0.4 }} 
+            className="col-span-2 lg:col-span-1 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 sm:p-6 hover:shadow-xl transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs sm:text-sm text-blue-100 mb-1 font-medium">Revenue</p>
+                <p className="text-xl sm:text-2xl font-bold text-white">₹{summary.revenue.toLocaleString()}</p>
+              </div>
+              <div className="bg-white/20 p-2 sm:p-3 rounded-lg">
+                <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Filters */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white rounded-xl shadow-lg mb-6 p-3 sm:p-4 border border-gray-100"
+        >
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+            </div>
+
             <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-full pl-10 pr-8 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
-            >
-              <option value="all">All Types</option>
-              <option value="payment">Payment</option>
-              <option value="refund">Refund</option>
-              <option value="wallet_credit">Wallet Credit</option>
-            </select>
-          </div>
-          <div className="relative">
-            <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full pl-10 pr-8 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all"
             >
               <option value="all">All Status</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
+              <option value="PENDING">Pending</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="REFUNDED">Refunded</option>
             </select>
           </div>
-        </div>
-      </div>
-      
-      {/* Transactions Table */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Transaction ID</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">User</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Order ID</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Type</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Amount</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredTransactions.map((transaction) => (
-                <motion.tr 
-                  key={transaction.id} 
-                  className="hover:bg-slate-50 transition-colors"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
+        </motion.div>
+
+        {/* Transactions grouped by user */}
+        <div className="space-y-3 sm:space-y-4">
+          {Object.values(groupedTransactions).map((userGroup, index) => {
+            const userId = userGroup.user._id;
+            const isOpen = userDropdowns[userId] || false;
+
+            return (
+              <motion.div 
+                key={userId}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 + index * 0.05 }}
+                className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 hover:shadow-xl transition-shadow"
+              >
+                <button
+                  onClick={() => setUserDropdowns(prev => ({ ...prev, [userId]: !isOpen }))}
+                  className="w-full text-left px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center hover:bg-gray-50 transition-colors"
                 >
-                  <td className="px-6 py-4 font-medium text-slate-800">{transaction.id}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <User size={16} className="text-slate-400" />
-                      <div>
-                        <p className="font-medium text-slate-800">{transaction.user}</p>
-                        <p className="text-sm text-slate-600">{transaction.userEmail}</p>
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">{userGroup.user.fullname}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">{userGroup.user.email}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {userGroup.transactions.length} {userGroup.transactions.length === 1 ? 'transaction' : 'transactions'}
+                    </p>
+                  </div>
+                  <div className="ml-4 flex items-center gap-2 sm:gap-3">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        exportToPDF(userGroup.transactions, `Transactions_${userGroup.user.fullname}`);
+                      }}
+                      className="p-2 sm:p-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow-sm"
+                    >
+                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
+                    {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="border-t border-gray-100"
+                  >
+                    <div className="divide-y divide-gray-100">
+                      {userGroup.transactions.map(txn => {
+                        const breakdown = calculateBreakdown(txn.amount, txn.type || 'wallet-topup');
+                        return (
+                          <div key={txn._id} className="px-4 sm:px-6 py-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start sm:items-center gap-2 flex-wrap">
+                                  <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">{txn.merchantOrderId}</p>
+                                  <span className={`px-2 py-1 text-xs font-semibold rounded-lg whitespace-nowrap ${getStatusColor(txn.status)}`}>
+                                    {txn.status}
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-xs sm:text-sm text-gray-500">
+                                  <span className="font-medium">{txn.paymentMethod}</span>
+                                  <span className="hidden sm:inline">•</span>
+                                  <span>{formatDate(txn.createdAt)}</span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between sm:justify-end gap-3">
+                                {txn.type === 'order-booking' ? (
+                                  <div className="text-xs sm:text-sm bg-gray-50 p-2 sm:p-3 rounded-lg border border-gray-200">
+                                    <div className="flex justify-between gap-3 sm:gap-4">
+                                      <span className="text-gray-600">Base:</span>
+                                      <span className="font-semibold text-gray-900">₹{breakdown.basePrice.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-3 sm:gap-4 mt-1">
+                                      <span className="text-gray-600">GST:</span>
+                                      <span className="font-semibold text-gray-900">₹{breakdown.gst.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-3 sm:gap-4 mt-1 pt-1 border-t border-gray-300">
+                                      <span className="text-gray-900 font-semibold">Total:</span>
+                                      <span className="font-bold text-blue-600">₹{breakdown.total.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="font-bold text-lg sm:text-xl text-blue-600">₹{txn.amount.toFixed(2)}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">{transaction.orderId}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      {getTypeIcon(transaction.type)}
-                      <span className={`font-medium capitalize ${getTypeColor(transaction.type)}`}>
-                        {transaction.type.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="font-medium text-slate-800">₹{transaction.amount}</p>
-                      {transaction.transactionFee > 0 && (
-                        <p className="text-sm text-slate-500">Fee: ₹{transaction.transactionFee}</p>
-                      )}
-                      <p className="text-sm text-slate-600">Net: ₹{transaction.netAmount}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(transaction.status)}`}>
-                      {transaction.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <p className="text-slate-800">{new Date(transaction.date).toLocaleDateString()}</p>
-                      <p className="text-sm text-slate-500">{new Date(transaction.date).toLocaleTimeString()}</p>
-                      <p className="text-sm text-slate-600">{transaction.paymentMethod}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="View Details">
-                        <Eye size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                  </motion.div>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
-        
+
         {filteredTransactions.length === 0 && (
-          <div className="text-center py-12">
-            <CreditCard size={48} className="mx-auto text-slate-400 mb-4" />
-            <p className="text-slate-600">No transactions found matching your criteria</p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-white rounded-xl shadow-lg p-8 sm:p-12 text-center border border-gray-100"
+          >
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400" />
+            </div>
+            <p className="text-gray-500 text-base sm:text-lg font-medium">No transactions found</p>
+            <p className="text-gray-400 text-sm sm:text-base mt-2">Try adjusting your search or filters</p>
+          </motion.div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 };
 
