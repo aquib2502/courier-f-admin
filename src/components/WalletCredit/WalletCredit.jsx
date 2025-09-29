@@ -1,248 +1,185 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Wallet, 
   User, 
   DollarSign, 
-  Plus, 
-  Minus,
-  Eye,
+  Plus,
   TrendingUp,
-  TrendingDown,
   Calendar,
   Search,
-  Filter
+  Filter,
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  CreditCard,
+  ShoppingBag
 } from 'lucide-react';
+import axios from 'axios';
 
 const WalletCredit = () => {
-  const [wallets, setWallets] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreditForm, setShowCreditForm] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState('');
-  const [creditForm, setCreditForm] = useState({
-    userId: '',
-    userName: '',
-    amount: '',
-    type: 'credit',
-    description: ''
-  });
+  const [filterType, setFilterType] = useState('all');
+  const [showCreditForm, setShowCreditForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [creditAmount, setCreditAmount] = useState('');
 
   useEffect(() => {
-    fetchWallets();
-    fetchTransactions();
+    fetchUsers();
   }, []);
 
-  const fetchWallets = async () => {
-    // TODO: Replace with actual API call
-    // try {
-    //   const response = await axios.get('/api/wallets');
-    //   setWallets(response.data);
-    // } catch (error) {
-    //   console.error('Failed to fetch wallets:', error);
-    // }
-    
-    // Mock data
-    setWallets([
-      { 
-        id: 1, 
-        userId: 'USR001',
-        userName: 'John Doe',
-        userEmail: 'john@example.com',
-        balance: 1250.50, 
-        lastTransaction: '2024-01-15T14:30:00',
-        totalCredits: 2500.00,
-        totalDebits: 1249.50,
-        status: 'active'
-      },
-      { 
-        id: 2, 
-        userId: 'USR002',
-        userName: 'Jane Smith',
-        userEmail: 'jane@example.com',
-        balance: 850.75, 
-        lastTransaction: '2024-01-14T10:15:00',
-        totalCredits: 1500.00,
-        totalDebits: 649.25,
-        status: 'active'
-      },
-      { 
-        id: 3, 
-        userId: 'USR003',
-        userName: 'Bob Wilson',
-        userEmail: 'bob@example.com',
-        balance: 0.00, 
-        lastTransaction: '2024-01-10T16:45:00',
-        totalCredits: 500.00,
-        totalDebits: 500.00,
-        status: 'inactive'
-      },
-      { 
-        id: 4, 
-        userId: 'USR004',
-        userName: 'Alice Brown',
-        userEmail: 'alice@example.com',
-        balance: 2150.25, 
-        lastTransaction: '2024-01-16T09:20:00',
-        totalCredits: 3000.00,
-        totalDebits: 849.75,
-        status: 'active'
-      }
-    ]);
+  useEffect(() => {
+    applyFilters();
+  }, [users, searchTerm, filterType]);
+
+  const fetchUsers = async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const { data } = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`);
+
+    console.log("Fetched data:", data); // <-- Debugging
+
+    // Access the users array properly
+    const usersArray = data.users || [];
+
+    // Filter users who have credit
+    const creditUsers = usersArray.filter(user => user.hasCredit === true);
+
+    setUsers(creditUsers);
+  } catch (err) {
+    setError(err.response?.data?.message || err.message || 'Failed to fetch users. Please try again.');
+    console.error('Error fetching users:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  const applyFilters = () => {
+    let filtered = [...users];
+
+    if (searchTerm) {
+      filtered = filtered.filter(user =>
+        user.fullname.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    switch (filterType) {
+      case 'creditUsed':
+        filtered = filtered.filter(user => user.usedCredit > 0);
+        break;
+      case 'nearExhaustion':
+        filtered = filtered.filter(user => {
+          const percentage = (user.usedCredit / user.creditLimit) * 100;
+          return percentage >= 80;
+        });
+        break;
+      default:
+        break;
+    }
+
+    setFilteredUsers(filtered);
   };
 
-  const fetchTransactions = async () => {
-    // TODO: Replace with actual API call
-    // try {
-    //   const response = await axios.get('/api/wallet-transactions');
-    //   setTransactions(response.data);
-    // } catch (error) {
-    //   console.error('Failed to fetch transactions:', error);
-    // } finally {
-    //   setLoading(false);
-    // }
-    
-    // Mock data
-    setTimeout(() => {
-      setTransactions([
-        {
-          id: 'TXN001',
-          userId: 'USR001',
-          userName: 'John Doe',
-          type: 'credit',
-          amount: 500.00,
-          balance: 1250.50,
-          description: 'Wallet top-up',
-          date: '2024-01-15T14:30:00',
-          adminUser: 'Admin User'
-        },
-        {
-          id: 'TXN002',
-          userId: 'USR002',
-          userName: 'Jane Smith',
-          type: 'debit',
-          amount: 150.25,
-          balance: 850.75,
-          description: 'Order payment',
-          date: '2024-01-14T10:15:00',
-          adminUser: 'System'
-        },
-        {
-          id: 'TXN003',
-          userId: 'USR001',
-          userName: 'John Doe',
-          type: 'credit',
-          amount: 750.50,
-          balance: 750.50,
-          description: 'Refund credited',
-          date: '2024-01-13T16:20:00',
-          adminUser: 'Admin User'
-        }
-      ]);
-      setLoading(false);
-    }, 1000);
-  };
+ const handleCreditSubmit = async (e) => {
+  e.preventDefault();
+  if (!selectedUser || !creditAmount) return;
 
-  const handleCreditWallet = async (e) => {
-    e.preventDefault();
-    
-    // TODO: Replace with actual API call
-    // try {
-    //   await axios.post(`/api/users/${creditForm.userId}/wallet`, {
-    //     amount: parseFloat(creditForm.amount),
-    //     type: creditForm.type,
-    //     description: creditForm.description
-    //   });
-    //   fetchWallets();
-    //   fetchTransactions();
-    // } catch (error) {
-    //   console.error('Wallet operation failed:', error);
-    // }
-    
-    console.log('Wallet operation:', creditForm);
-    
-    // Update wallet balance
-    const amount = parseFloat(creditForm.amount);
-    setWallets(prev => prev.map(wallet => {
-      if (wallet.userId === creditForm.userId) {
-        const newBalance = creditForm.type === 'credit' 
-          ? wallet.balance + amount 
-          : wallet.balance - amount;
-        return {
-          ...wallet,
-          balance: Math.max(0, newBalance),
-          lastTransaction: new Date().toISOString(),
-          totalCredits: creditForm.type === 'credit' ? wallet.totalCredits + amount : wallet.totalCredits,
-          totalDebits: creditForm.type === 'debit' ? wallet.totalDebits + amount : wallet.totalDebits
-        };
-      }
-      return wallet;
-    }));
+  setSubmitting(true);
+  setError(null);
 
-    // Add transaction
-    const newTransaction = {
-      id: `TXN${Date.now()}`,
-      userId: creditForm.userId,
-      userName: creditForm.userName,
-      type: creditForm.type,
-      amount: amount,
-      balance: 0, // Will be calculated
-      description: creditForm.description,
-      date: new Date().toISOString(),
-      adminUser: 'Current Admin'
-    };
-    
-    setTransactions(prev => [newTransaction, ...prev]);
+  try {
+    const apiUrl = selectedUser.hasCredit
+      ? `${process.env.NEXT_PUBLIC_API_URL}/api/admin/update-credit`  // already has credit → update
+      : `${process.env.NEXT_PUBLIC_API_URL}/api/admin/give-credit`;   // no credit → give credit
 
-    // Reset form
-    setCreditForm({
-      userId: '',
-      userName: '',
-      amount: '',
-      type: 'credit',
-      description: ''
+    const method = selectedUser.hasCredit ? 'PUT' : 'POST';
+
+    const response = await fetch(apiUrl, {
+      method,
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: selectedUser._id,
+        creditLimit: parseFloat(creditAmount),
+        resetUsedCredit: selectedUser.hasCredit // optional: reset used credit when updating
+      })
     });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || 'Failed to update credit');
+    }
+
+    setSuccessMessage(result.message || `Credit updated successfully for ${selectedUser.fullname}!`);
+    setTimeout(() => setSuccessMessage(''), 5000);
+
+    await fetchUsers();
+
+    setCreditAmount('');
     setShowCreditForm(false);
+    setSelectedUser(null);
+  } catch (err) {
+    setError(err.message || 'Failed to update credit. Please try again.');
+    console.error('Error updating credit:', err);
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+
+  const handleUserSelect = (user) => {
+    setSelectedUser(user);
+    setCreditAmount(user.creditLimit.toString());
+    setShowCreditForm(true);
+    setError(null);
   };
 
-  const handleUserSelect = (wallet) => {
-    setCreditForm(prev => ({
-      ...prev,
-      userId: wallet.userId,
-      userName: wallet.userName
-    }));
+ const getNextResetDate = (currentResetDate) => {
+  if (!currentResetDate) return 'N/A';
+  
+  const date = new Date(currentResetDate);
+  
+  // Add 1 month
+  date.setMonth(date.getMonth() + 1);
+  
+  return date.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+};
+
+
+  const getCreditPercentage = (used, limit) => {
+    if (limit === 0) return 0;
+    return Math.min((used / limit) * 100, 100);
   };
 
-  const filteredWallets = wallets.filter(wallet =>
-    wallet.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wallet.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    wallet.userEmail.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const filteredTransactions = selectedUser 
-    ? transactions.filter(t => t.userId === selectedUser)
-    : transactions;
-
-  const totalWalletBalance = wallets.reduce((sum, wallet) => sum + wallet.balance, 0);
-  const activeWallets = wallets.filter(w => w.status === 'active').length;
+  const getStatusColor = (percentage) => {
+    if (percentage >= 80) return 'bg-red-500';
+    if (percentage >= 50) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-800">Wallet Credits</h1>
-          <div className="w-32 h-10 bg-slate-200 rounded-xl animate-pulse"></div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, index) => (
-            <div key={index} className="bg-white p-6 rounded-xl shadow-lg animate-pulse">
-              <div className="h-8 bg-slate-200 rounded mb-2"></div>
-              <div className="h-4 bg-slate-200 rounded w-20"></div>
-            </div>
-          ))}
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <Loader2 size={48} className="mx-auto text-slate-600 animate-spin mb-4" />
+          <p className="text-slate-600 text-lg">Loading users...</p>
         </div>
       </div>
     );
@@ -252,316 +189,263 @@ const WalletCredit = () => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
+      className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">Wallet Credits</h1>
-        <button 
-          onClick={() => setShowCreditForm(!showCreditForm)}
-          className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus size={16} />
-          <span>Credit/Debit Wallet</span>
-        </button>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Total Balance</p>
-              <p className="text-2xl font-bold text-slate-800">{transactions.length}</p>
-            </div>
-            <TrendingUp size={24} className="text-blue-600" />
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800">Credit Management</h1>
+            <p className="text-slate-600 mt-1">Manage user credit limits and wallets</p>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-600 bg-white px-4 py-2 rounded-xl shadow">
+            <User size={16} />
+            <span>{filteredUsers.length} credit users</span>
           </div>
         </div>
-      </div>
 
-      {/* Credit/Debit Form */}
-      {showCreditForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="bg-white rounded-2xl shadow-lg p-6"
-        >
-          <h3 className="text-lg font-semibold text-slate-800 mb-6">Credit/Debit Wallet</h3>
-          <form onSubmit={handleCreditWallet} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Select User
-                </label>
-                <select
-                  value={creditForm.userId}
-                  onChange={(e) => {
-                    const selectedWallet = wallets.find(w => w.userId === e.target.value);
-                    if (selectedWallet) {
-                      handleUserSelect(selectedWallet);
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  required
-                >
-                  <option value="">Choose a user</option>
-                  {wallets.map((wallet) => (
-                    <option key={wallet.userId} value={wallet.userId}>
-                      {wallet.userName} - ₹{wallet.balance.toFixed(2)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Amount (₹)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={creditForm.amount}
-                  onChange={(e) => setCreditForm(prev => ({ ...prev, amount: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-                  placeholder="Enter amount"
-                  required
-                />
-              </div>
-            </div>
+        <AnimatePresence>
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3"
+            >
+              <CheckCircle size={20} className="text-green-600" />
+              <p className="text-green-800">{successMessage}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Description
-              </label>
-              <textarea
-                value={creditForm.description}
-                onChange={(e) => setCreditForm(prev => ({ ...prev, description: e.target.value }))}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-                placeholder="Enter description"
-                rows="3"
-                required
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3"
+          >
+            <AlertCircle size={20} className="text-red-600" />
+            <p className="text-red-800">{error}</p>
+          </motion.div>
+        )}
+
+        <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 transition-all"
               />
             </div>
-
-            <div className="flex justify-end space-x-4">
-              <button
-                type="button"
-                onClick={() => setShowCreditForm(false)}
-                className="px-6 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors"
+            <div className="relative w-full md:w-64">
+              <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white cursor-pointer transition-all"
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                onClick={() => setCreditForm(prev => ({ ...prev, type: 'credit' }))}
-                className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-2"
-              >
-                <Plus size={16} />
-                <span>Credit</span>
-              </button>
-              <button
-                type="submit"
-                onClick={() => setCreditForm(prev => ({ ...prev, type: 'debit' }))}
-                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors flex items-center space-x-2"
-              >
-                <Minus size={16} />
-                <span>Debit</span>
-              </button>
+                <option value="all">All Users</option>
+                <option value="creditUsed">Credit Used</option>
+                <option value="nearExhaustion">Near Exhaustion (≥80%)</option>
+              </select>
             </div>
-          </form>
-        </motion.div>
-      )}
-
-      {/* Search */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-            />
           </div>
-          <div className="relative">
-            <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <select
-              value={selectedUser}
-              onChange={(e) => setSelectedUser(e.target.value)}
-              className="pl-10 pr-8 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
+        </div>
+
+        <AnimatePresence>
+          {showCreditForm && selectedUser && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-white rounded-2xl shadow-lg overflow-hidden"
             >
-              <option value="">All Transactions</option>
-              {wallets.map((wallet) => (
-                <option key={wallet.userId} value={wallet.userId}>
-                  {wallet.userName}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
+              <div className="bg-gradient-to-r from-slate-600 to-slate-800 px-6 py-4">
+                <h3 className="text-lg font-semibold text-white">Update Credit Limit</h3>
+                <p className="text-slate-200 text-sm mt-1">for {selectedUser.fullname}</p>
+              </div>
+              <div className="p-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      New Credit Limit (₹)
+                    </label>
+                    <div className="relative">
+                      <DollarSign size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={creditAmount}
+                        onChange={(e) => setCreditAmount(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
+                        placeholder="Enter credit limit"
+                      />
+                    </div>
+                    <p className="text-sm text-slate-500 mt-2">
+                      Current limit: ₹{selectedUser.creditLimit.toFixed(2)}
+                    </p>
+                  </div>
 
-      {/* Wallets Table */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-800">User Wallets</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">User</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Balance</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Total Credits</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Total Debits</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Last Transaction</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-slate-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredWallets.map((wallet) => (
-                <motion.tr 
-                  key={wallet.id} 
-                  className="hover:bg-slate-50 transition-colors"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreditForm(false);
+                        setSelectedUser(null);
+                        setCreditAmount('');
+                      }}
+                      className="flex-1 px-6 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors"
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
+                   <button
+  type="button"
+  onClick={handleCreditSubmit}  // use the new unified function
+  className="flex-1 px-6 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+  disabled={submitting || !creditAmount}
+>
+  {submitting ? (
+    <>
+      <Loader2 size={16} className="animate-spin" />
+      <span>Updating...</span>
+    </>
+  ) : (
+    <>
+      <CheckCircle size={16} />
+      <span>{selectedUser?.hasCredit ? 'Update Credit' : 'Give Credit'}</span>
+    </>
+  )}  
+</button>
+
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {filteredUsers.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <Wallet size={48} className="mx-auto text-slate-400 mb-4" />
+            <p className="text-slate-600 text-lg">No users found</p>
+            <p className="text-slate-500 text-sm mt-2">
+              {searchTerm || filterType !== 'all' 
+                ? 'Try adjusting your search or filters' 
+                : 'No users with credit enabled'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredUsers.map((user) => {
+              const creditPercentage = getCreditPercentage(user.usedCredit, user.creditLimit);
+              const isSelected = selectedUser?._id === user._id;
+              
+              return (
+                <motion.div
+                  key={user._id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={`bg-white rounded-2xl shadow-lg overflow-hidden cursor-pointer transition-all hover:shadow-xl ${
+                    isSelected ? 'ring-2 ring-slate-800 shadow-2xl' : ''
+                  }`}
+                  onClick={() => handleUserSelect(user)}
                 >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-r from-slate-400 to-slate-600 rounded-full flex items-center justify-center">
-                        <User size={16} className="text-white" />
+                  <div className="bg-gradient-to-r from-slate-600 to-slate-800 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+                        <User size={20} className="text-white" />
                       </div>
-                      <div>
-                        <p className="font-medium text-slate-800">{wallet.userName}</p>
-                        <p className="text-sm text-slate-600">{wallet.userEmail}</p>
-                        <p className="text-sm text-slate-500">{wallet.userId}</p>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-white truncate">{user.fullname}</h3>
+                        <p className="text-slate-200 text-sm truncate">{user.email}</p>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <DollarSign size={16} className="text-slate-600" />
-                      <span className="text-lg font-bold text-slate-800">₹{wallet.balance.toFixed(2)}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <TrendingUp size={14} className="text-green-600" />
-                      <span className="font-medium text-green-600">₹{wallet.totalCredits.toFixed(2)}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <TrendingDown size={14} className="text-red-600" />
-                      <span className="font-medium text-red-600">₹{wallet.totalDebits.toFixed(2)}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <Calendar size={14} className="text-slate-400" />
-                      <span className="text-sm text-slate-600">
-                        {new Date(wallet.lastTransaction).toLocaleDateString()}
+                  </div>
+
+                  <div className="p-4 space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Wallet size={16} className="text-slate-600" />
+                        <span className="text-sm text-slate-600">Wallet</span>
+                      </div>
+                      <span className="text-lg font-bold text-slate-800">
+                        ₹{user.walletBalance.toFixed(2)}
                       </span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      wallet.status === 'active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-slate-100 text-slate-800'
-                    }`}>
-                      {wallet.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => {
-                          handleUserSelect(wallet);
-                          setShowCreditForm(true);
-                        }}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                        title="Credit/Debit"
-                      >
-                        <DollarSign size={16} />
-                      </button>
-                      <button
-                        onClick={() => setSelectedUser(wallet.userId)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="View Transactions"
-                      >
-                        <Eye size={16} />
-                      </button>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600">Credit Limit</span>
+                        <span className="font-semibold text-slate-800">
+                          ₹{user.creditLimit.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600">Used Credit</span>
+                        <span className="font-semibold text-red-600">
+                          ₹{user.usedCredit.toFixed(2)}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${creditPercentage}%` }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            className={`h-full ${getStatusColor(creditPercentage)}`}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{creditPercentage.toFixed(0)}% used</span>
+                          <span>₹{(user.creditLimit - user.usedCredit).toFixed(2)} available</span>
+                        </div>
+                      </div>
                     </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        
-        {filteredWallets.length === 0 && (
-          <div className="text-center py-12">
-            <Wallet size={48} className="mx-auto text-slate-400 mb-4" />
-            <p className="text-slate-600">No wallets found</p>
+
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="text-slate-400" />
+                        <div>
+                          <p className="text-xs text-slate-500">Reset Date</p>
+                          <p className="text-xs font-medium text-slate-700">
+                            {getNextResetDate(user.creditResetDate)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <ShoppingBag size={14} className="text-slate-400" />
+                        <div>
+                          <p className="text-xs text-slate-500">Orders</p>
+                          <p className="text-xs font-medium text-slate-700">
+                            {user.totalOrders || 0}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUserSelect(user);
+                      }}
+                      className="w-full py-2.5 bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
+                    >
+                      <CreditCard size={16} />
+                      <span>Update Credit</span>
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
-      </div>
-
-      {/* Recent Transactions */}
-      <div className="bg-white rounded-2xl shadow-lg">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h3 className="text-lg font-semibold text-slate-800">
-            {selectedUser ? `Transactions for ${wallets.find(w => w.userId === selectedUser)?.userName}` : 'Recent Transactions'}
-          </h3>
-        </div>
-        <div className="p-6">
-          <div className="space-y-4">
-            {filteredTransactions.slice(0, 10).map((transaction) => (
-              <motion.div
-                key={transaction.id}
-                className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:shadow-md transition-shadow"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="flex items-center space-x-4">
-                  <div className={`p-2 rounded-lg ${
-                    transaction.type === 'credit' 
-                      ? 'bg-green-100 text-green-600' 
-                      : 'bg-red-100 text-red-600'
-                  }`}>
-                    {transaction.type === 'credit' ? <Plus size={20} /> : <Minus size={20} />}
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-800">{transaction.userName}</p>
-                    <p className="text-sm text-slate-600">{transaction.description}</p>
-                    <p className="text-sm text-slate-500">by {transaction.adminUser}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`text-lg font-bold ${
-                    transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toFixed(2)}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {new Date(transaction.date).toLocaleDateString()}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-            
-            {filteredTransactions.length === 0 && (
-              <div className="text-center py-8">
-                <p className="text-slate-600">No transactions found</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </motion.div>
   );

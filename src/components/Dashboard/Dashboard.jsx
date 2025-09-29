@@ -414,7 +414,7 @@ export default function DashboardContent() {
       case 'discounts': return <Discounts />;
       case 'rbfm': return <RBFM />;
       case 'clubbing': return <Clubbing />
-      case 'dispute': return <DisputeForm />
+      case 'inward-scan': return <DisputeForm />
       default: return <UserManagement />;
     }
   };
