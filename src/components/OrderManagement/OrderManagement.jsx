@@ -386,9 +386,25 @@ const OrderManagement = () => {
             <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
               <Eye size={16} />
             </button>
-            <button className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-              <Truck size={16} />
-            </button>
+                       {order?.shipmentDetails?.pdf ? (
+  <a
+    href={order.shipmentDetails.pdf}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors inline-flex items-center justify-center"
+    title="View Shipment PDF"
+  >
+    <FileTextIcon size={16} />
+  </a>
+) : (
+  <button
+    disabled
+    className="p-2 text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed"
+    title="No PDF available"
+  >
+    <FileTextIcon size={16} />
+  </button>
+)}
           </div>
         </div>
       </motion.div>
