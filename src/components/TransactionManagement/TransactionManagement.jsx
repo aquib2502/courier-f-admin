@@ -83,88 +83,137 @@ const TransactionManagement = () => {
     return { basePrice: amount, gst: 0, total: amount };
   };
 
-  const exportToPDF = (transactionsToExport, title = "Transactions") => {
-    try {
-      const doc = new jsPDF("p", "pt", "a4");
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
+const exportToPDF = (transactionsToExport, title = "Order Booking Transactions") => {
+  try {
+    const doc = new jsPDF("p", "pt", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text(title, pageWidth / 2, 30, { align: "center" });
+    // Filter only order-booking transactions
+    const orderTransactions = transactionsToExport.filter(
+      (txn) => (txn.type || "wallet-topup") === "order-booking"
+    );
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(
-        `Generated on: ${new Date().toLocaleString()}`,
-        pageWidth / 2,
-        45,
-        { align: "center" }
-      );
-
-      const tableData = transactionsToExport.map((txn) => {
-        const txnType = txn.type || "wallet-topup";
-        const breakdown = calculateBreakdown(txn.amount || 0, txnType);
-
-        const amountText =
-          txnType === "order-booking"
-            ? `Base: Rs. ${breakdown.basePrice.toFixed(2)} | GST: Rs. ${breakdown.gst.toFixed(2)} | Total: Rs. ${breakdown.total.toFixed(2)}`
-            : `Rs. ${(txn.amount || 0).toFixed(2)}`;
-
-        return [
-          txn.user?.fullname || "N/A",
-          txn.user?.mobile || "N/A",
-          txn.merchantOrderId || "N/A",
-          txnType === "wallet-topup" ? "Wallet Top-up" : "Order Booking",
-          amountText,
-          txn.createdAt ? new Date(txn.createdAt).toLocaleString() : "N/A",
-        ];
-      });
-
-      autoTable(doc, {
-        startY: 60,
-        head: [["Name", "Mobile", "Order ID", "Type", "Amount", "Date"]],
-        body: tableData,
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-          overflow: "linebreak",
-          valign: "middle",
-        },
-        headStyles: {
-          fillColor: [59, 130, 246],
-          textColor: 255,
-          fontStyle: "bold",
-          halign: "center",
-        },
-        bodyStyles: { halign: "center" },
-        alternateRowStyles: { fillColor: [245, 247, 250] },
-        columnStyles: {
-          0: { cellWidth: 90 },
-          1: { cellWidth: 80 },
-          2: { cellWidth: 100 },
-          3: { cellWidth: 80 },
-          4: { cellWidth: 120 },
-          5: { cellWidth: "auto" },
-        },
-        didDrawPage: () => {
-          const pageCount = doc.internal.getNumberOfPages();
-          doc.setFontSize(9);
-          doc.text(
-            `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
-            pageWidth - 60,
-            pageHeight - 20
-          );
-        },
-      });
-
-      doc.save(`${title.replace(/\s+/g, "_")}_${Date.now()}.pdf`);
-      showNotification("PDF exported successfully!", "success");
-    } catch (error) {
-      console.error(error);
-      showNotification("Failed to export PDF", "error");
+    if (orderTransactions.length === 0) {
+      showNotification("No order booking transactions found.", "error");
+      return;
     }
-  };
+
+    // Branding Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(33, 37, 41);
+    doc.text("The Trace Express", pageWidth / 2, 30, { align: "center" });
+
+    // Subtitle
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.text(title, pageWidth / 2, 48, { align: "center" });
+
+    doc.setFontSize(9);
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+      pageWidth / 2,
+      62,
+      { align: "center" }
+    );
+
+    // --- Totals ---
+    let totalBasePrice = 0;
+    let totalGST = 0;
+    let totalAmount = 0;
+
+    // Table Data
+    const tableData = orderTransactions.map((txn) => {
+      const breakdown = calculateBreakdown(txn.amount || 0, "order-booking");
+      totalBasePrice += breakdown.basePrice;
+      totalGST += breakdown.gst;
+      totalAmount += breakdown.total;
+
+      return [
+        txn.user?.fullname || "N/A",
+        txn.user?.mobile || "N/A",
+        txn.merchantOrderId || "N/A",
+        `Rs. ${breakdown.total.toFixed(2)}`,
+        new Date(txn.createdAt).toLocaleDateString("en-GB").replace(/\//g, "/"),
+      ];
+    });
+
+    // --- PDF Table ---
+    autoTable(doc, {
+      startY: 80,
+      head: [["Name", "Mobile", "Order ID", "Amount", "Date"]],
+      body: tableData,
+      styles: {
+        fontSize: 9,
+        cellPadding: 6,
+        overflow: "linebreak",
+        lineColor: [230, 230, 230],
+        lineWidth: 0.1,
+      },
+      headStyles: {
+        fillColor: [25, 118, 210], // Blue header
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      bodyStyles: {
+        halign: "center",
+        textColor: [33, 37, 41],
+      },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      columnStyles: {
+        0: { cellWidth: 110 }, // Name
+        1: { cellWidth: 90 },  // Mobile
+        2: { cellWidth: 100 }, // Order ID
+        3: { cellWidth: 80 },  // Amount
+        4: { cellWidth: "auto" }, // Date
+      },
+    });
+
+    // --- Summary Totals Section ---
+    const finalY = doc.lastAutoTable.finalY + 25;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Summary", 40, finalY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(33, 37, 41);
+
+    const summaryLines = [
+      `Base Price Total: Rs ${totalBasePrice.toFixed(2)} /-`,
+      `GST Total: Rs ${totalGST.toFixed(2)} /-`,
+      `Grand Total: Rs ${totalAmount.toFixed(2)} /-`,
+    ];
+
+    summaryLines.forEach((line, i) => {
+      doc.text(line, 60, finalY + 18 + i * 16);
+    });
+
+    // Footer with page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth - 60,
+        pageHeight - 20
+      );
+    }
+
+    doc.save(`${title.replace(/\s+/g, "_")}_${Date.now()}.pdf`);
+    showNotification("Order Booking PDF exported successfully!", "success");
+  } catch (error) {
+    console.error(error);
+    showNotification("Failed to export PDF", "error");
+  }
+};
+
+
 
   const getSummary = () => {
     const txnList = transactions || [];
