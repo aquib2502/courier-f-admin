@@ -213,6 +213,158 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
   }
 };
 
+const exportAllToPDF = () => {
+  try {
+    const doc = new jsPDF("p", "pt", "a4");
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const grouped = groupByUser();
+
+    // --- PDF Header ---
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(33, 37, 41);
+    doc.text("The Trace Express", pageWidth / 2, 30, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.text("All Users Transaction Summary", pageWidth / 2, 48, { align: "center" });
+
+    doc.setFontSize(9);
+    doc.text(
+      `Generated on: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`,
+      pageWidth / 2,
+      62,
+      { align: "center" }
+    );
+
+    let currentY = 80;
+    let grandBase = 0;
+    let grandGST = 0;
+    let grandTotal = 0;
+
+    // Loop over each user group
+    Object.values(grouped).forEach((group, index) => {
+      const { user, transactions } = group;
+
+      if (index > 0) {
+        doc.addPage();
+        currentY = 40;
+      }
+
+      // --- User Header ---
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(`User: ${user.fullname || "N/A"}`, 40, currentY);
+      currentY += 18;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Email: ${user.email || "N/A"}`, 40, currentY);
+      currentY += 14;
+      doc.text(`Mobile: ${user.mobile || "N/A"}`, 40, currentY);
+      currentY += 20;
+
+      // Filter only order-booking transactions
+      const userTransactions = transactions.filter(
+        (txn) => (txn.type || "wallet-topup") === "order-booking"
+      );
+
+      if (userTransactions.length === 0) {
+        doc.setFontSize(10);
+        doc.text("No order booking transactions found.", 40, currentY);
+        return;
+      }
+
+      let totalBase = 0;
+      let totalGST = 0;
+      let totalAmt = 0;
+
+      const tableData = userTransactions.map((txn) => {
+        const breakdown = calculateBreakdown(txn.amount || 0, "order-booking");
+        totalBase += breakdown.basePrice;
+        totalGST += breakdown.gst;
+        totalAmt += breakdown.total;
+
+        return [
+          txn.merchantOrderId || "N/A",
+          new Date(txn.createdAt).toLocaleDateString("en-GB"),
+          `Rs. ${breakdown.basePrice.toFixed(2)}`,
+          `Rs. ${breakdown.gst.toFixed(2)}`,
+          `Rs. ${breakdown.total.toFixed(2)}`,
+        ];
+      });
+
+      // --- Table ---
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Order ID", "Date", "Base Price", "GST", "Total"]],
+        body: tableData,
+        styles: { fontSize: 9, cellPadding: 6 },
+        headStyles: {
+          fillColor: [25, 118, 210],
+          textColor: 255,
+          fontStyle: "bold",
+          halign: "center",
+        },
+        bodyStyles: { halign: "center" },
+        alternateRowStyles: { fillColor: [248, 249, 250] },
+      });
+
+      const afterTableY = doc.lastAutoTable.finalY + 20;
+
+      // --- User Summary ---
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("User Summary", 40, afterTableY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      const lines = [
+        `Base Price Total: Rs ${totalBase.toFixed(2)} /-`,
+        `GST Total: Rs ${totalGST.toFixed(2)} /-`,
+        `Grand Total: Rs ${totalAmt.toFixed(2)} /-`,
+      ];
+      lines.forEach((line, i) => doc.text(line, 60, afterTableY + 18 + i * 16));
+
+      grandBase += totalBase;
+      grandGST += totalGST;
+      grandTotal += totalAmt;
+    });
+
+    // --- Final Grand Summary Page ---
+    doc.addPage();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Overall Summary (All Users)", 40, 60);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.text(`Total Base Price: Rs ${grandBase.toFixed(2)} /-`, 60, 90);
+    doc.text(`Total GST: Rs ${grandGST.toFixed(2)} /-`, 60, 110);
+    doc.text(`Overall Total: Rs ${grandTotal.toFixed(2)} /-`, 60, 130);
+
+    // Footer Page Numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - 60, pageHeight - 20);
+    }
+
+    doc.save(`All_Users_Transactions_${Date.now()}.pdf`);
+    showNotification("All Users PDF exported successfully!", "success");
+  } catch (error) {
+    console.error(error);
+    showNotification("Failed to export all users PDF", "error");
+  }
+};
+
 
 
   const getSummary = () => {
@@ -403,6 +555,14 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
               <option value="COMPLETED">Completed</option>
               <option value="REFUNDED">Refunded</option>
             </select>
+
+             <button
+    onClick={exportAllToPDF}
+    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all"
+  >
+    <Download className="w-4 h-4" />
+    Export All
+  </button>
           </div>
         </motion.div>
 
