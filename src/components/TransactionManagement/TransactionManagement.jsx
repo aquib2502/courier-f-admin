@@ -99,7 +99,7 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
       return;
     }
 
-    // Branding Header
+    // --- Branding Header ---
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
     doc.setTextColor(33, 37, 41);
@@ -110,9 +110,13 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
     doc.setFontSize(12);
     doc.text(title, pageWidth / 2, 48, { align: "center" });
 
+    // Timestamp
     doc.setFontSize(9);
     doc.text(
-      `Generated on: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+      `Generated on: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`,
       pageWidth / 2,
       62,
       { align: "center" }
@@ -123,7 +127,7 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
     let totalGST = 0;
     let totalAmount = 0;
 
-    // Table Data
+    // --- Prepare Table Data ---
     const tableData = orderTransactions.map((txn) => {
       const breakdown = calculateBreakdown(txn.amount || 0, "order-booking");
       totalBasePrice += breakdown.basePrice;
@@ -134,77 +138,87 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
         txn.user?.fullname || "N/A",
         txn.user?.mobile || "N/A",
         txn.merchantOrderId || "N/A",
-        `Rs. ${breakdown.total.toFixed(2)}`,
+        `Rs ${breakdown.basePrice.toFixed(2)} /-`,
+        `Rs ${breakdown.gst.toFixed(2)} /-`,
+        `Rs ${breakdown.total.toFixed(2)} /-`,
         new Date(txn.createdAt).toLocaleDateString("en-GB").replace(/\//g, "/"),
       ];
     });
 
-    // --- PDF Table ---
+    // --- Main Transactions Table ---
     autoTable(doc, {
       startY: 80,
-      head: [["Name", "Mobile", "Order ID", "Amount", "Date"]],
+      head: [["Name", "Mobile", "Order ID", "Base", "GST", "Total", "Date"]],
       body: tableData,
+      theme: "grid",
       styles: {
         fontSize: 9,
         cellPadding: 6,
         overflow: "linebreak",
         lineColor: [230, 230, 230],
         lineWidth: 0.1,
+        textColor: [33, 37, 41],
       },
       headStyles: {
-        fillColor: [25, 118, 210], // Blue header
+        fillColor: [25, 118, 210],
         textColor: 255,
         fontStyle: "bold",
         halign: "center",
       },
-      bodyStyles: {
+      bodyStyles: { halign: "center" },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      columnStyles: {
+        0: { cellWidth: 100 }, // Name
+        1: { cellWidth: 90 },  // Mobile
+        2: { cellWidth: 90 },  // Order ID
+        3: { cellWidth: 70 },  // Base
+        4: { cellWidth: 60 },  // GST
+        5: { cellWidth: 70 },  // Total
+        6: { cellWidth: "auto" }, // Date
+      },
+    });
+
+    const finalY = doc.lastAutoTable.finalY + 30;
+
+    // --- Styled Summary Table ---
+    autoTable(doc, {
+      startY: finalY,
+      theme: "grid",
+      head: [["Summary Type", "Amount"]],
+      body: [
+        ["Base Price Total", `Rs ${totalBasePrice.toFixed(2)} /-`],
+        ["GST Total", `Rs ${totalGST.toFixed(2)} /-`],
+        ["Grand Total", `Rs ${totalAmount.toFixed(2)} /-`],
+      ],
+      styles: {
+        fontSize: 10,
+        cellPadding: 6,
         halign: "center",
         textColor: [33, 37, 41],
       },
-      alternateRowStyles: { fillColor: [248, 249, 250] },
-      columnStyles: {
-        0: { cellWidth: 110 }, // Name
-        1: { cellWidth: 90 },  // Mobile
-        2: { cellWidth: 100 }, // Order ID
-        3: { cellWidth: 80 },  // Amount
-        4: { cellWidth: "auto" }, // Date
+      headStyles: {
+        fillColor: [25, 118, 210],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
       },
+      columnStyles: {
+        0: { cellWidth: 250, halign: "left" },
+        1: { halign: "right" },
+      },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
     });
 
-    // --- Summary Totals Section ---
-    const finalY = doc.lastAutoTable.finalY + 25;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("Summary", 40, finalY);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.setTextColor(33, 37, 41);
-
-    const summaryLines = [
-      `Base Price Total: Rs ${totalBasePrice.toFixed(2)} /-`,
-      `GST Total: Rs ${totalGST.toFixed(2)} /-`,
-      `Grand Total: Rs ${totalAmount.toFixed(2)} /-`,
-    ];
-
-    summaryLines.forEach((line, i) => {
-      doc.text(line, 60, finalY + 18 + i * 16);
-    });
-
-    // Footer with page numbers
+    // --- Footer Page Numbers ---
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(9);
       doc.setTextColor(120, 120, 120);
-      doc.text(
-        `Page ${i} of ${pageCount}`,
-        pageWidth - 60,
-        pageHeight - 20
-      );
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - 60, pageHeight - 20);
     }
 
+    // --- Save File ---
     doc.save(`${title.replace(/\s+/g, "_")}_${Date.now()}.pdf`);
     showNotification("Order Booking PDF exported successfully!", "success");
   } catch (error) {
@@ -212,6 +226,7 @@ const exportToPDF = (transactionsToExport, title = "Order Booking Transactions")
     showNotification("Failed to export PDF", "error");
   }
 };
+
 
 const exportAllToPDF = () => {
   try {
@@ -221,7 +236,7 @@ const exportAllToPDF = () => {
 
     const grouped = groupByUser();
 
-    // --- PDF Header ---
+    // --- Header ---
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
     doc.setTextColor(33, 37, 41);
@@ -247,7 +262,7 @@ const exportAllToPDF = () => {
     let grandGST = 0;
     let grandTotal = 0;
 
-    // Loop over each user group
+    // Loop through each user group
     Object.values(grouped).forEach((group, index) => {
       const { user, transactions } = group;
 
@@ -256,20 +271,22 @@ const exportAllToPDF = () => {
         currentY = 40;
       }
 
-      // --- User Header ---
+      // --- User Info Header ---
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
+      doc.setTextColor(25, 118, 210);
       doc.text(`User: ${user.fullname || "N/A"}`, 40, currentY);
-      currentY += 18;
 
+      currentY += 16;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
+      doc.setTextColor(60, 60, 60);
       doc.text(`Email: ${user.email || "N/A"}`, 40, currentY);
       currentY += 14;
       doc.text(`Mobile: ${user.mobile || "N/A"}`, 40, currentY);
       currentY += 20;
 
-      // Filter only order-booking transactions
+      // Filter only order-booking
       const userTransactions = transactions.filter(
         (txn) => (txn.type || "wallet-topup") === "order-booking"
       );
@@ -293,43 +310,61 @@ const exportAllToPDF = () => {
         return [
           txn.merchantOrderId || "N/A",
           new Date(txn.createdAt).toLocaleDateString("en-GB"),
-          `Rs. ${breakdown.basePrice.toFixed(2)}`,
-          `Rs. ${breakdown.gst.toFixed(2)}`,
-          `Rs. ${breakdown.total.toFixed(2)}`,
+          `Rs ${breakdown.basePrice.toFixed(2)} /-`,
+          `Rs ${breakdown.gst.toFixed(2)} /-`,
+          `Rs ${breakdown.total.toFixed(2)} /-`,
         ];
       });
 
-      // --- Table ---
+      // --- Transaction Table ---
       autoTable(doc, {
         startY: currentY,
         head: [["Order ID", "Date", "Base Price", "GST", "Total"]],
         body: tableData,
-        styles: { fontSize: 9, cellPadding: 6 },
+        styles: { fontSize: 9, cellPadding: 6, textColor: [33, 37, 41] },
         headStyles: {
           fillColor: [25, 118, 210],
           textColor: 255,
           fontStyle: "bold",
           halign: "center",
         },
-        bodyStyles: { halign: "center" },
         alternateRowStyles: { fillColor: [248, 249, 250] },
+        bodyStyles: { halign: "center" },
       });
 
-      const afterTableY = doc.lastAutoTable.finalY + 20;
+      const afterTableY = doc.lastAutoTable.finalY + 25;
 
-      // --- User Summary ---
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text("User Summary", 40, afterTableY);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(11);
-      const lines = [
-        `Base Price Total: Rs ${totalBase.toFixed(2)} /-`,
-        `GST Total: Rs ${totalGST.toFixed(2)} /-`,
-        `Grand Total: Rs ${totalAmt.toFixed(2)} /-`,
-      ];
-      lines.forEach((line, i) => doc.text(line, 60, afterTableY + 18 + i * 16));
+      // --- Stylish User Summary Table ---
+      autoTable(doc, {
+        startY: afterTableY,
+        theme: "grid",
+        head: [["Summary Type", "Amount (Rs)"]],
+        body: [
+          ["Base Price Total", totalBase.toFixed(2)],
+          ["GST Total", totalGST.toFixed(2)],
+          ["Grand Total", totalAmt.toFixed(2)],
+        ],
+        styles: {
+          fontSize: 10,
+          halign: "center",
+          cellPadding: 6,
+        },
+        headStyles: {
+          fillColor: [25, 118, 210],
+          textColor: 255,
+          fontStyle: "bold",
+          halign: "center",
+        },
+        columnStyles: {
+          0: { cellWidth: 250, halign: "left" },
+          1: { halign: "right" },
+        },
+        bodyStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [33, 37, 41],
+        },
+        alternateRowStyles: { fillColor: [248, 249, 250] },
+      });
 
       grandBase += totalBase;
       grandGST += totalGST;
@@ -338,17 +373,38 @@ const exportAllToPDF = () => {
 
     // --- Final Grand Summary Page ---
     doc.addPage();
+
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
+    doc.setTextColor(25, 118, 210);
     doc.text("Overall Summary (All Users)", 40, 60);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.text(`Total Base Price: Rs ${grandBase.toFixed(2)} /-`, 60, 90);
-    doc.text(`Total GST: Rs ${grandGST.toFixed(2)} /-`, 60, 110);
-    doc.text(`Overall Total: Rs ${grandTotal.toFixed(2)} /-`, 60, 130);
+    // Grand Summary Table
+    autoTable(doc, {
+      startY: 90,
+      theme: "grid",
+      head: [["Metric", "Total (Rs)"]],
+      body: [
+        ["Total Base Price", grandBase.toFixed(2)],
+        ["Total GST", grandGST.toFixed(2)],
+        ["Overall Total", grandTotal.toFixed(2)],
+      ],
+      styles: { fontSize: 11, halign: "center", cellPadding: 8 },
+      headStyles: {
+        fillColor: [25, 118, 210],
+        textColor: 255,
+        fontStyle: "bold",
+        halign: "center",
+      },
+      columnStyles: {
+        0: { cellWidth: 250, halign: "left" },
+        1: { halign: "right" },
+      },
+      bodyStyles: { textColor: [33, 37, 41] },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+    });
 
-    // Footer Page Numbers
+    // --- Footer Page Numbers ---
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
@@ -517,7 +573,7 @@ const exportAllToPDF = () => {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <p className="text-xs sm:text-sm text-blue-100 mb-1 font-medium">Revenue</p>
-                <p className="text-xl sm:text-2xl font-bold text-white">₹{summary.revenue.toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-bold text-white">Rs {summary.revenue.toLocaleString()}</p>
               </div>
               <div className="bg-white/20 p-2 sm:p-3 rounded-lg">
                 <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -638,19 +694,19 @@ const exportAllToPDF = () => {
                                   <div className="text-xs sm:text-sm bg-gray-50 p-2 sm:p-3 rounded-lg border border-gray-200">
                                     <div className="flex justify-between gap-3 sm:gap-4">
                                       <span className="text-gray-600">Base:</span>
-                                      <span className="font-semibold text-gray-900">₹{breakdown.basePrice.toFixed(2)}</span>
+                                      <span className="font-semibold text-gray-900">Rs {breakdown.basePrice.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between gap-3 sm:gap-4 mt-1">
                                       <span className="text-gray-600">GST:</span>
-                                      <span className="font-semibold text-gray-900">₹{breakdown.gst.toFixed(2)}</span>
+                                      <span className="font-semibold text-gray-900">Rs {breakdown.gst.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between gap-3 sm:gap-4 mt-1 pt-1 border-t border-gray-300">
                                       <span className="text-gray-900 font-semibold">Total:</span>
-                                      <span className="font-bold text-blue-600">₹{breakdown.total.toFixed(2)}</span>
+                                      <span className="font-bold text-blue-600">Rs {breakdown.total.toFixed(2)}</span>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="font-bold text-lg sm:text-xl text-blue-600">₹{txn.amount.toFixed(2)}</div>
+                                  <div className="font-bold text-lg sm:text-xl text-blue-600">Rs {txn.amount.toFixed(2)}</div>
                                 )}
                               </div>
                             </div>
