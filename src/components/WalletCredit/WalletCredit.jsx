@@ -52,9 +52,11 @@ const WalletCredit = () => {
     // Access the users array properly
     const usersArray = data.users || [];
 
-    // Filter users who have credit
+  
+    // ✅ Filter users whose KYC is approved
+    const approvedUsers = usersArray.filter(user => user.kycStatus === 'approved');
 
-    setUsers(usersArray);
+    setUsers(approvedUsers);
   } catch (err) {
     setError(err.response?.data?.message || err.message || 'Failed to fetch users. Please try again.');
     console.error('Error fetching users:', err);
