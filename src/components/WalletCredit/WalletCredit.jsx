@@ -53,9 +53,8 @@ const WalletCredit = () => {
     const usersArray = data.users || [];
 
     // Filter users who have credit
-    const creditUsers = usersArray.filter(user => user.hasCredit === true);
 
-    setUsers(creditUsers);
+    setUsers(usersArray);
   } catch (err) {
     setError(err.response?.data?.message || err.message || 'Failed to fetch users. Please try again.');
     console.error('Error fetching users:', err);
@@ -364,6 +363,11 @@ const WalletCredit = () => {
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-white truncate">{user.fullname}</h3>
                         <p className="text-slate-200 text-sm truncate">{user.email}</p>
+                        {!user.hasCredit && (
+  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-md ml-2">
+    No Credit
+  </span>
+)}
                       </div>
                     </div>
                   </div>
