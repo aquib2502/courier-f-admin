@@ -252,45 +252,84 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
   /* ---------------------------
      Club orders (dynamic import axios)
      --------------------------- */
-  const handleClubOrders = async () => {
-    if (scannedOrderIds.length === 0) return showScanFeedback('error', 'Please scan at least one order');
-    if (!clubName.trim()) return showScanFeedback('error', 'Please enter a club name');
+ const handleClubOrders = async () => {
+  try {
+    console.log('[ClubOrders] Button clicked');
+    if (scannedOrderIds.length === 0) {
+      console.warn('[ClubOrders] No scanned orders');
+      return showScanFeedback('error', 'Please scan at least one order');
+    }
+    if (!clubName.trim()) {
+      console.warn('[ClubOrders] No club name provided');
+      return showScanFeedback('error', 'Please enter a club name');
+    }
 
     setClubbingLoading(true);
-    try {
-      const scannedOrdersData = getScannedOrderDetails();
-      const userIds = [...new Set(scannedOrdersData.map((o) => o.user?._id || o.user).filter(Boolean))];
+    console.log('[ClubOrders] Preparing payload...');
 
-      if (userIds.length === 0) {
-        setClubbingLoading(false);
-        return showScanFeedback('error', 'Scanned orders must have valid user IDs');
-      }
+    const scannedOrdersData = getScannedOrderDetails();
+    const userIds = [...new Set(scannedOrdersData.map((o) => o.user?._id || o.user).filter(Boolean))];
 
-      const axios = (await import('axios')).default;
-      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/club`, {
-        userIds,
-        orderIds: scannedOrderIds,
-        clubName: clubName.trim(),
-      });
-
-      if (res.status === 201) {
-        showScanFeedback('success', 'Orders clubbed successfully!');
-        if (onClubSuccess) onClubSuccess();
-        setScannedOrderIds([]);
-        setClubName('');
-        setTimeout(() => {
-          // keep UX smooth: ensure cleanup
-          stopScanning();
-          onClose();
-        }, 1200);
-      }
-    } catch (err) {
-      console.error('Failed to club orders:', err);
-      showScanFeedback('error', err?.response?.data?.message || 'Failed to club orders');
-    } finally {
+    if (userIds.length === 0) {
+      console.error('[ClubOrders] Invalid user IDs in scanned orders');
       setClubbingLoading(false);
+      return showScanFeedback('error', 'Scanned orders must have valid user IDs');
     }
-  };
+
+    // fallback if env var missing
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+    if (!apiBase) {
+      console.error('[ClubOrders] NEXT_PUBLIC_API_URL not set');
+      return showScanFeedback('error', 'API base URL missing in environment variables');
+    }
+
+    console.log('[ClubOrders] Sending POST to:', `${apiBase}/api/orders/club`);
+    console.table({ userIds, scannedOrderIds, clubName: clubName.trim() });
+
+    const axios = (await import('axios')).default;
+    const res = await axios.post(`${apiBase}/api/orders/club`, {
+      userIds,
+      orderIds: scannedOrderIds,
+      clubName: clubName.trim(),
+    });
+
+    console.log('[ClubOrders] Response:', res.status, res.data);
+
+    if (res.status === 201) {
+      showScanFeedback('success', 'Orders clubbed successfully!');
+      if (onClubSuccess) onClubSuccess();
+
+      setScannedOrderIds([]);
+      setClubName('');
+
+      setTimeout(() => {
+        stopScanning();
+        onClose();
+      }, 1200);
+    } else {
+      console.warn('[ClubOrders] Unexpected response status:', res.status);
+      showScanFeedback('error', 'Unexpected server response');
+    }
+  } catch (err) {
+    console.error('[ClubOrders] Failed to club orders:', err);
+
+    // in-app visible debug message
+    const errMsg =
+      err?.response?.data?.message ||
+      err?.message ||
+      'Failed to club orders — check network or permissions';
+
+    showScanFeedback('error', errMsg);
+
+    // extra: mobile alert fallback for debugging
+    if (/Mobi|Android/i.test(navigator.userAgent)) {
+      alert(`Club Orders Error:\n${errMsg}`);
+    }
+  } finally {
+    setClubbingLoading(false);
+  }
+};
+
 
   /* ---------------------------
      UI: same as your code; small behavior fixes:
