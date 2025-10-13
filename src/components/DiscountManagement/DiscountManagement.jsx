@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  Percent,
+  IndianRupee,
   Search,
   Users,
   RefreshCw,
@@ -11,27 +11,66 @@ import {
   Edit3,
   CheckCircle,
   AlertCircle,
-  X
+  X,
+  Package,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import axios from 'axios';
 
 const DiscountManagement = () => {
+  // State
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [updatingUserId, setUpdatingUserId] = useState(null);
   const [editingUserId, setEditingUserId] = useState(null);
+  const [expandedUserId, setExpandedUserId] = useState(null);
   const [tempDiscountValues, setTempDiscountValues] = useState({});
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  // Packages by country
+  const packagesByCountry = {
+    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium', 'Express', 'Self'],
+    'United Kingdom': ['Direct', 'First Class', 'Premium'],
+    'Canada': ['Direct', 'First Class', 'Premium', 'Special'],
+    'Australia': ['Direct'],
+    'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide']
+  };
 
+  // Flatten all packages for default structure
+  const getAllPackages = () => {
+    const packages = {};
+    Object.entries(packagesByCountry).forEach(([country, countryPackages]) => {
+      countryPackages.forEach(pkg => {
+        packages[`${country}-${pkg}`] = 0;
+      });
+    });
+    return packages;
+  };
+
+  // Fetch users from API
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`);
-      setUsers(response?.data?.users || []);
+      let rawUsers = Array.isArray(response?.data?.users) ? response.data.users : [response?.data?.user];
+
+      // Clean packageDiscounts to ensure plain object
+      const cleanedUsers = rawUsers.map(user => {
+        let pkgDiscounts = user.packageDiscounts || {};
+        if (pkgDiscounts instanceof Map) {
+          pkgDiscounts = Object.fromEntries(pkgDiscounts);
+        } else if (typeof pkgDiscounts !== 'object' || Array.isArray(pkgDiscounts)) {
+          try {
+            pkgDiscounts = JSON.parse(pkgDiscounts);
+          } catch {
+            pkgDiscounts = {};
+          }
+        }
+        return { ...user, packageDiscounts: pkgDiscounts };
+      });
+
+      setUsers(cleanedUsers.filter(u => u.kycStatus === "approved"));
     } catch (error) {
       console.error('Failed to fetch users:', error);
     } finally {
@@ -39,22 +78,29 @@ const DiscountManagement = () => {
     }
   };
 
-  const updateUserDiscount = async (userId, discountRate) => {
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  // Update user discounts
+  const updateUserDiscount = async (userId, packageDiscounts) => {
     setUpdatingUserId(userId);
     try {
-      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateuser/${userId}`, {
-        discountRate: parseFloat(discountRate)
+      // Only send non-zero discounts
+      const nonZeroDiscounts = Object.entries(packageDiscounts)
+        .filter(([_, value]) => value > 0)
+        .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+
+      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/api/user/updateuser/${userId}`, {
+        packageDiscounts: nonZeroDiscounts
       });
-      
+
       // Update local state
-      setUsers(prevUsers => 
-        prevUsers.map(user => 
-          user._id === userId 
-            ? { ...user, discountRate: parseFloat(discountRate) }
-            : user
-        )
-      );
-      
+      setUsers(prev => prev.map(user => user._id === userId 
+        ? { ...user, packageDiscounts: nonZeroDiscounts } 
+        : user
+      ));
+
       // Clear editing state
       setEditingUserId(null);
       setTempDiscountValues(prev => {
@@ -62,10 +108,8 @@ const DiscountManagement = () => {
         delete updated[userId];
         return updated;
       });
-      
-    } catch (error) {
-      console.error('Failed to update user discount:', error);
-      // Reset to original value on error
+    } catch {
+      // Reset temp values on error
       setTempDiscountValues(prev => {
         const updated = { ...prev };
         delete updated[userId];
@@ -76,30 +120,32 @@ const DiscountManagement = () => {
     }
   };
 
+  // Start editing discounts
   const handleDiscountEdit = (userId) => {
     setEditingUserId(userId);
+    setExpandedUserId(userId);
+
     const user = users.find(u => u._id === userId);
+    const currentDiscounts = { ...getAllPackages(), ...(user?.packageDiscounts || {}) };
+    setTempDiscountValues(prev => ({ ...prev, [userId]: currentDiscounts }));
+  };
+
+  // Change discount value for a package
+  const handlePackageDiscountChange = (userId, packageKey, value) => {
+    const discountValue = Math.max(0, parseInt(value) || 0);
     setTempDiscountValues(prev => ({
       ...prev,
-      [userId]: user?.discountRate || 0
+      [userId]: { ...(prev[userId] || getAllPackages()), [packageKey]: discountValue }
     }));
   };
 
-  const handleDiscountChange = (userId, value) => {
-    const discountRate = Math.max(0, Math.min(100, parseFloat(value) || 0));
-    setTempDiscountValues(prev => ({
-      ...prev,
-      [userId]: discountRate
-    }));
-  };
-
+  // Save discount changes
   const handleSaveDiscount = (userId) => {
     const newValue = tempDiscountValues[userId];
-    if (newValue !== undefined) {
-      updateUserDiscount(userId, newValue);
-    }
+    if (newValue) updateUserDiscount(userId, newValue);
   };
 
+  // Cancel editing
   const handleCancelEdit = (userId) => {
     setEditingUserId(null);
     setTempDiscountValues(prev => {
@@ -109,13 +155,42 @@ const DiscountManagement = () => {
     });
   };
 
+  // Expand/collapse user packages
+  const toggleUserExpand = (userId) => {
+    setExpandedUserId(expandedUserId === userId ? null : userId);
+  };
+
+  // Utility: total discount
+  const getTotalDiscount = (packageDiscounts) => {
+    if (!packageDiscounts || typeof packageDiscounts !== 'object') return 0;
+    return Object.values(packageDiscounts)
+      .filter(v => typeof v === 'number')
+      .reduce((sum, val) => sum + val, 0);
+  };
+
+  // Utility: count active discounts
+  const getActiveDiscountsCount = (packageDiscounts) => {
+    if (!packageDiscounts || typeof packageDiscounts !== 'object') return 0;
+    return Object.values(packageDiscounts).filter(v => v > 0).length;
+  };
+
+  // Filtered users by search
   const filteredUsers = users.filter(user => 
     user.fullname?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
     user.email?.toLowerCase().includes(userSearchTerm.toLowerCase())
   );
 
-  const getUsersWithDiscounts = filteredUsers.filter(user => user.discountRate > 0);
-  const getUsersWithoutDiscounts = filteredUsers.filter(user => !user.discountRate || user.discountRate === 0);
+  // Users with/without discounts
+  const getUsersWithDiscounts = filteredUsers.filter(u => getActiveDiscountsCount(u.packageDiscounts) > 0);
+  const getUsersWithoutDiscounts = filteredUsers.filter(u => getActiveDiscountsCount(u.packageDiscounts) === 0);
+
+  // Loading skeleton
+  if (loading) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-6 flex justify-center items-center">
+      <RefreshCw size={32} className="animate-spin text-slate-400" />
+    </div>
+  );
+
 
   if (loading) {
     return (
@@ -159,13 +234,13 @@ const DiscountManagement = () => {
           {/* Header */}
           <div className="text-center px-2">
             <div className="inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
-              <Percent className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+              <IndianRupee className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-800 mb-2">
-              User Discount Management
+              Package Discount Management
             </h1>
             <p className="text-slate-600 text-sm sm:text-base lg:text-lg">
-              Manage individual discount rates for your users
+              Manage package-specific discounts for KYC approved users (in ₹)
             </p>
           </div>
 
@@ -182,7 +257,7 @@ const DiscountManagement = () => {
                 </div>
                 <div className="min-w-0">
                   <div className="text-xl sm:text-2xl font-bold text-slate-800">{filteredUsers.length}</div>
-                  <div className="text-xs sm:text-sm text-slate-600">Total Users</div>
+                  <div className="text-xs sm:text-sm text-slate-600">KYC Approved Users</div>
                 </div>
               </div>
             </motion.div>
@@ -266,61 +341,72 @@ const DiscountManagement = () => {
               {filteredUsers.map((user) => {
                 const isEditing = editingUserId === user._id;
                 const isUpdating = updatingUserId === user._id;
-                const displayValue = isEditing ? (tempDiscountValues[user._id] || 0) : (user.discountRate || 0);
+                const isExpanded = expandedUserId === user._id;
+                
+                // For display: merge defaults with actual discounts
+                const displayValue = isEditing 
+                  ? (tempDiscountValues[user._id] || { ...getAllPackages(), ...(user.packageDiscounts || {}) }) 
+                  : { ...getAllPackages(), ...(user.packageDiscounts || {}) };
+                
+                const activeDiscountsCount = getActiveDiscountsCount(user.packageDiscounts);
+                const totalDiscount = getTotalDiscount(user.packageDiscounts);
                 
                 return (
                   <motion.div
                     key={user._id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="p-4 sm:p-6 hover:bg-slate-50 transition-colors"
+                    className="hover:bg-slate-50 transition-colors"
                   >
-                    <div className="flex items-start sm:items-center justify-between space-x-3">
-                      <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
-                        <div className="relative flex-shrink-0">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-lg">
-                            {user.fullname?.charAt(0)?.toUpperCase() || 'U'}
-                          </div>
-                          {user.discountRate > 0 && (
-                            <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center">
-                              <Percent className="w-2 h-2 sm:w-3 sm:h-3 text-white" />
+                    {/* User Header */}
+                    <div className="p-4 sm:p-6">
+                      <div className="flex items-start sm:items-center justify-between space-x-3">
+                        <div className="flex items-center space-x-3 sm:space-x-4 min-w-0 flex-1">
+                          <div className="relative flex-shrink-0">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-lg">
+                              {user.fullname?.charAt(0)?.toUpperCase() || 'U'}
                             </div>
-                          )}
+                            {activeDiscountsCount > 0 && (
+                              <div className="absolute -top-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">{activeDiscountsCount}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm sm:text-lg font-semibold text-slate-800 truncate">
+                              {user.fullname || 'Unknown User'}
+                            </h4>
+                            <p className="text-xs sm:text-base text-slate-600 truncate">{user.email}</p>
+                            {totalDiscount > 0 && (
+                              <p className="text-xs sm:text-sm text-green-600 font-medium flex items-center gap-1">
+                                <IndianRupee size={12} />
+                                Total: ₹{totalDiscount} across {activeDiscountsCount} packages
+                              </p>
+                            )}
+                          </div>
                         </div>
                         
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm sm:text-lg font-semibold text-slate-800 truncate">
-                            {user.fullname || 'Unknown User'}
-                          </h4>
-                          <p className="text-xs sm:text-base text-slate-600 truncate">{user.email}</p>
-                          {user.discountRate > 0 && (
-                            <p className="text-xs sm:text-sm text-green-600 font-medium">
-                              {user.discountRate}% discount
-                            </p>
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          {!isEditing && (
+                            <>
+                              <button
+                                onClick={() => toggleUserExpand(user._id)}
+                                className="p-1.5 sm:p-2 bg-blue-100 text-blue-600 rounded-md sm:rounded-lg hover:bg-blue-200 transition-colors touch-manipulation"
+                                title={isExpanded ? "Collapse" : "Expand"}
+                              >
+                                {isExpanded ? <ChevronUp size={14} className="sm:w-4 sm:h-4" /> : <ChevronDown size={14} className="sm:w-4 sm:h-4" />}
+                              </button>
+                              <button
+                                onClick={() => handleDiscountEdit(user._id)}
+                                className="p-1.5 sm:p-2 bg-purple-100 text-purple-600 rounded-md sm:rounded-lg hover:bg-purple-200 transition-colors touch-manipulation"
+                                title="Edit Discounts"
+                              >
+                                <Edit3 size={14} className="sm:w-4 sm:h-4" />
+                              </button>
+                            </>
                           )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-                        {isEditing ? (
-                          <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                            <div className="relative">
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="5"
-                                value={displayValue}
-                                onChange={(e) => handleDiscountChange(user._id, e.target.value)}
-                                className="w-16 sm:w-20 px-2 py-1.5 sm:px-3 sm:py-2 text-right text-sm border border-purple-300 rounded-md sm:rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                placeholder="0"
-                                autoFocus
-                              />
-                              <span className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 text-slate-500 text-xs sm:text-sm pointer-events-none">
-                                %
-                              </span>
-                            </div>
-                            
+                          {isEditing && (
                             <div className="flex items-center space-x-1 sm:space-x-2">
                               <button
                                 onClick={() => handleSaveDiscount(user._id)}
@@ -344,28 +430,60 @@ const DiscountManagement = () => {
                                 <X size={14} className="sm:w-4 sm:h-4" />
                               </button>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col sm:flex-row items-end sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                            <div className={`px-2 py-1 sm:px-4 sm:py-2 rounded-md sm:rounded-lg font-semibold text-xs sm:text-sm ${
-                              user.discountRate > 0
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {user.discountRate || 0}%
-                            </div>
-                            
-                            <button
-                              onClick={() => handleDiscountEdit(user._id)}
-                              className="p-1.5 sm:p-2 bg-purple-100 text-purple-600 rounded-md sm:rounded-lg hover:bg-purple-200 transition-colors touch-manipulation"
-                              title="Edit Discount"
-                            >
-                              <Edit3 size={14} className="sm:w-4 sm:h-4" />
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Package Discounts */}
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="px-4 sm:px-6 pb-4 sm:pb-6"
+                      >
+                        <div className="bg-slate-50 rounded-lg sm:rounded-xl p-3 sm:p-4 space-y-3 sm:space-y-4">
+                          {Object.entries(packagesByCountry).map(([country, packages]) => (
+                            <div key={country} className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <Package size={14} className="text-slate-600 sm:w-4 sm:h-4" />
+                                <h5 className="text-xs sm:text-sm font-semibold text-slate-700">{country}</h5>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 ml-5 sm:ml-6">
+                                {packages.map(pkg => {
+                                  const packageKey = `${country}-${pkg}`;
+                                  const value = displayValue[packageKey] || 0;
+                                  return (
+                                    <div key={packageKey} className="flex items-center justify-between bg-white rounded-md sm:rounded-lg p-2 sm:p-3 border border-slate-200">
+                                      <span className="text-xs sm:text-sm text-slate-700 font-medium truncate mr-2">{pkg}</span>
+                                      {isEditing ? (
+                                        <div className="relative flex items-center">
+                                          <IndianRupee size={12} className="absolute left-2 text-slate-500" />
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            value={value}
+                                            onChange={(e) => handlePackageDiscountChange(user._id, packageKey, e.target.value)}
+                                            className="w-20 sm:w-24 pl-6 pr-2 py-1 text-xs sm:text-sm text-right border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <span className={`text-xs sm:text-sm font-semibold flex items-center ${value > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                                          <IndianRupee size={12} />
+                                          {value}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
                   </motion.div>
                 );
               })}
@@ -373,7 +491,7 @@ const DiscountManagement = () => {
               {filteredUsers.length === 0 && !loading && (
                 <div className="text-center py-8 sm:py-12 px-4">
                   <Users size={32} className="sm:w-12 sm:h-12 mx-auto text-slate-400 mb-3 sm:mb-4" />
-                  <p className="text-slate-600 text-base sm:text-lg font-medium">No users found</p>
+                  <p className="text-slate-600 text-base sm:text-lg font-medium">No KYC approved users found</p>
                   <p className="text-slate-500 text-sm sm:text-base">Try adjusting your search terms</p>
                 </div>
               )}

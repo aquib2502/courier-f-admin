@@ -11,6 +11,7 @@ import { toast, ToastContainer } from 'react-toastify';
 
 const RateManagement = () => {
   const [rates, setRates] = useState([]);
+  const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showRateForm, setShowRateForm] = useState(false);
   const [editingRate, setEditingRate] = useState(null);
@@ -25,6 +26,21 @@ const RateManagement = () => {
   });
 
   const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/rates`;
+  const COUNTRIES_API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/rates/countries`;
+
+  // Package types based on country
+  const packagesByCountry = {
+    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium', 'Express', 'Premium Self'],
+    'United Kingdom': ['Direct', 'First Class', 'Premium'],
+    'Canada': ['Direct', 'First Class', 'Premium', 'Special'],
+    'Australia': ['Direct'],
+    'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide']
+  };
+
+  // Get available packages for selected country
+  const getAvailablePackages = (country) => {
+    return packagesByCountry[country] || [];
+  };
 
   // ================== FETCH RATES ==================
   const fetchRates = async () => {
@@ -42,8 +58,23 @@ const RateManagement = () => {
     }
   };
 
+  // ================== FETCH COUNTRIES ==================
+  const fetchCountries = async () => {
+    try {
+      const { data } = await axios.get(COUNTRIES_API_URL, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      setCountries(data);
+    } catch (error) {
+      console.error('Failed to fetch countries:', error);
+    }
+  };
+
   useEffect(() => {
     fetchRates();
+    fetchCountries();
   }, []);
 
   // ================== GROUPING ==================
@@ -90,10 +121,27 @@ const RateManagement = () => {
 
   const getPackageColor = (packageType) => {
     const colors = {
-      'Premium': 'bg-purple-100 text-purple-800 border-purple-200',
+      // United States packages
+      'Super Saver': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      'Direct': 'bg-blue-100 text-blue-800 border-blue-200',
+      'USPS Special': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'First Class': 'bg-purple-100 text-purple-800 border-purple-200',
+      'Premium': 'bg-pink-100 text-pink-800 border-pink-200',
+      'Express': 'bg-red-100 text-red-800 border-red-200',
+      'Premium Self': 'bg-orange-100 text-orange-800 border-orange-200',
+      
+      // Canada packages
+      'Special': 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      
+      // European Union packages
+      'Direct Yun': 'bg-teal-100 text-teal-800 border-teal-200',
+      'Premium DPD': 'bg-violet-100 text-violet-800 border-violet-200',
+      'Worldwide': 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200',
+      
+      // Legacy packages
       'Cheaper': 'bg-green-100 text-green-800 border-green-200',
       'UPS': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'DHL': 'bg-red-100 text-red-800 border-red-200',
+      'DHL': 'bg-amber-100 text-amber-800 border-amber-200',
     };
     return colors[packageType] || 'bg-slate-100 text-slate-800 border-slate-200';
   };
@@ -170,6 +218,15 @@ const RateManagement = () => {
     });
     setEditingRate(null);
     setShowRateForm(false);
+  };
+
+  // Handle country change and reset package selection
+  const handleCountryChange = (country) => {
+    setRateForm(prev => ({ 
+      ...prev, 
+      dest_country: country,
+      package: '' // Reset package when country changes
+    }));
   };
 
   if (loading) {
@@ -306,28 +363,41 @@ const RateManagement = () => {
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Destination Country
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={rateForm.dest_country}
-                    onChange={(e) => setRateForm(prev => ({ ...prev, dest_country: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    placeholder="United States (USA)"
+                    onChange={(e) => handleCountryChange(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
                     required
-                  />
+                  >
+                    <option value="">Select Country</option>
+                    {countries.map(country => (
+                      <option key={country.code} value={country.name}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Package Type
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={rateForm.package}
                     onChange={(e) => setRateForm(prev => ({ ...prev, package: e.target.value }))}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    placeholder="Cheaper / Premium / UPS / DHL"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
+                    disabled={!rateForm.dest_country}
                     required
-                  />
+                  >
+                    <option value="">
+                      {rateForm.dest_country ? 'Select Package Type' : 'Select Country First'}
+                    </option>
+                    {rateForm.dest_country && getAvailablePackages(rateForm.dest_country).map(pkg => (
+                      <option key={pkg} value={pkg}>
+                        {pkg}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -412,7 +482,7 @@ const RateManagement = () => {
                         .sort((a, b) => a.weight - b.weight)
                         .map((rate, index) => (
                           <motion.div
-                            key={rate.id}
+                            key={rate._id}
                             className="p-4 hover:bg-slate-50 transition-colors"
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
