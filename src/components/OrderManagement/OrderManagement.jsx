@@ -33,6 +33,7 @@ import {
   FileTextIcon
 } from 'lucide-react';
 import axios from 'axios';
+import { ToastContainer,toast } from 'react-toastify';
 
 const OrderManagement = () => {
   const [orders, setOrders] = useState([]);
@@ -50,6 +51,14 @@ const OrderManagement = () => {
   const [showClubbingModal, setShowClubbingModal] = useState(false);
   const [clubName, setClubName] = useState('');
   const [clubbingLoading, setClubbingLoading] = useState(false);
+
+  // For status dropdown + modal
+const [activeAction, setActiveAction] = useState(null);
+const [showConfirmModal, setShowConfirmModal] = useState(false);
+const [pendingStatus, setPendingStatus] = useState('');
+const [pendingOrderId, setPendingOrderId] = useState(null);
+const [updatingStatus, setUpdatingStatus] = useState(false);
+
 
   // Detect mobile screen size
   useEffect(() => {
@@ -78,6 +87,40 @@ const OrderManagement = () => {
       setLoading(false);
     }
   };
+
+  const handleStatusChangeClick = (orderId, status) => {
+  setPendingOrderId(orderId);
+  setPendingStatus(status);
+  setShowConfirmModal(true);
+  setActiveAction(null);
+};
+
+
+const confirmStatusChange = async () => {
+  if (!pendingOrderId || !pendingStatus) return;
+
+  setUpdatingStatus(true);
+  try {
+    const res = await axios.put(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateorderstatus/${pendingOrderId}`,
+      { status: pendingStatus } // 👈 FIXED
+    );
+
+    if (res.status === 200) {
+      toast(`Order status updated to ${pendingStatus}`);
+      fetchOrders();
+    }
+  } catch (err) {
+    console.error('Status update failed:', err);
+    toast(err.response?.data?.message || 'Failed to update order status');
+  } finally {
+    setUpdatingStatus(false);
+    setShowConfirmModal(false);
+    setPendingOrderId(null);
+    setPendingStatus('');
+  }
+};
+
 
   // Handle order selection for clubbing
   const handleOrderSelection = (orderId) => {
@@ -635,6 +678,7 @@ const OrderManagement = () => {
       ) : (
         /* Desktop View - Table */
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <ToastContainer />
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
@@ -766,12 +810,40 @@ const OrderManagement = () => {
                     
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        <button 
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
-                          title="View Details"
-                        >
-                          <Eye size={16} />
-                        </button>
+                        <div className="relative">
+  <button
+    onClick={() => setActiveAction(order._id === activeAction ? null : order._id)}
+    className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+    title="Actions"
+  >
+    <MoreVertical size={16} />
+  </button>
+
+  {activeAction === order._id && (
+    <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
+      {[
+        'Drafts',
+        'Ready',
+        'Packed',
+        'Manifested',
+        'Shipped',
+        'Delivered',
+        'Cancelled',
+        'Refunded',
+        'Disputed'
+      ].map(status => (
+        <button
+          key={status}
+          onClick={() => handleStatusChangeClick(order._id, status)}
+          className="w-full text-left px-4 py-2 text-sm hover:bg-slate-100 text-slate-700"
+        >
+          {status}
+        </button>
+      ))}
+    </div>
+  )}
+</div>
+
                        {order?.shipmentDetails?.pdf ? (
   <a
     href={order.shipmentDetails.pdf}
@@ -902,6 +974,40 @@ const OrderManagement = () => {
     setShowScanAndClub(false);
   }}
 />
+
+{/* Confirm Status Change Modal */}
+{showConfirmModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-blur bg-opacity-50 p-4">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-amber-100 rounded-2xl shadow-2xl p-6 max-w-sm w-full"
+    >
+      <h3 className="text-lg font-bold text-slate-800 mb-3">Confirm Status Change</h3>
+      <p className="text-slate-600 mb-6">
+        Are you sure you want to change the status to{' '}
+        <span className="font-semibold text-blue-600">{pendingStatus}</span>?
+      </p>
+
+      <div className="flex justify-end space-x-3">
+        <button
+          onClick={() => setShowConfirmModal(false)}
+          className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={confirmStatusChange}
+          disabled={updatingStatus}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {updatingStatus ? 'Updating...' : 'Confirm'}
+        </button>
+      </div>
+    </motion.div>
+  </div>
+)}
+
     </motion.div>
   );
 };
