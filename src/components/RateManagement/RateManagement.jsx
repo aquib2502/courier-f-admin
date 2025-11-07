@@ -30,11 +30,11 @@ const RateManagement = () => {
 
   // Package types based on country
   const packagesByCountry = {
-    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium', 'Express', 'Premium Self'],
-    'United Kingdom': ['Direct', 'First Class', 'Premium'],
-    'Canada': ['Direct', 'First Class', 'Premium', 'Special'],
-    'Australia': ['Direct'],
-    'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide']
+    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium', 'Express', 'Premium Self', 'QuickExpress'],
+    'United Kingdom': ['Direct', 'First Class', 'Premium', 'QuickExpress'],
+    'Canada': ['Direct', 'First Class', 'Premium', 'Special', 'QuickExpress'],
+    'Australia': ['Direct', 'QuickExpress'],
+    'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide', 'QuickExpress'],
   };
 
   // Get available packages for selected country
