@@ -6,11 +6,19 @@ import { X } from "lucide-react";
 
 const EditKYCModal = ({ isOpen, onClose, user, onUpdateKYC }) => {
   const [newStatus, setNewStatus] = useState(user?.kycStatus || "pending");
+  const [rejectReason, setRejectReason] = useState(user?.kycRejectReason || "");
 
   if (!isOpen || !user) return null;
 
   const handleSave = () => {
-    onUpdateKYC(user._id, newStatus);
+    const payload = { kycStatus: newStatus };
+
+    // Include reason only if rejected
+    if (newStatus === "rejected") {
+      payload.kycRejectReason = rejectReason.trim();
+    }
+
+    onUpdateKYC(user._id, payload);
     onClose();
   };
 
@@ -42,7 +50,7 @@ const EditKYCModal = ({ isOpen, onClose, user, onUpdateKYC }) => {
           Edit KYC Status
         </h2>
 
-        {/* Dropdown */}
+        {/* Status Dropdown */}
         <div className="space-y-4">
           <label className="block text-sm font-medium text-slate-600">
             KYC Status
@@ -58,6 +66,22 @@ const EditKYCModal = ({ isOpen, onClose, user, onUpdateKYC }) => {
           </select>
         </div>
 
+        {/* Reject Reason (only when rejected) */}
+        {newStatus === "rejected" && (
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-slate-600 mb-1">
+              Rejection Reason <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              placeholder="Enter reason for rejection"
+              className="w-full p-2 border border-slate-300 rounded-lg focus:ring focus:ring-red-200"
+            />
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex justify-end gap-3 mt-6">
           <button
@@ -68,7 +92,12 @@ const EditKYCModal = ({ isOpen, onClose, user, onUpdateKYC }) => {
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            disabled={newStatus === "rejected" && !rejectReason.trim()}
+            className={`px-4 py-2 rounded-lg text-white ${
+              newStatus === "rejected" && !rejectReason.trim()
+                ? "bg-blue-300 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700"
+            }`}
           >
             Save
           </button>

@@ -111,23 +111,22 @@ const UserManagement = () => {
     }
   };
 
-  const onUpdateKYC = async (userId, newStatus) => {
-    try {
-      const response = await axios.patch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateKYC/${userId}`,
-        {
-          kycStatus: newStatus,
-        }
-      );
+ const onUpdateKYC = async (userId, data) => {
+  try {
+    const response = await axios.patch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateKYC/${userId}`,
+      data
+    );
 
-      if (response.status === 200) {
-        toast.success("KYC status updated!");
-        fetchUsers();
-      }
-    } catch (err) {
-      toast.error("Error updating KYC status");
+    if (response.status === 200) {
+      toast.success("KYC status updated!");
+      fetchUsers();
     }
-  };
+  } catch (err) {
+    toast.error(err.response?.data?.message || "Error updating KYC status");
+  }
+};
+
 
   const filteredUsers = users.filter((user) => {
     const name = (user.fullname || "").toLowerCase();
