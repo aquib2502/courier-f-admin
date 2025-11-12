@@ -30,7 +30,11 @@ import {
   MoreVertical,
   ChevronDown,
   ChevronUp,
-  FileTextIcon
+  FileTextIcon,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import axios from 'axios';
 import { ToastContainer,toast } from 'react-toastify';
@@ -46,6 +50,10 @@ const OrderManagement = () => {
   const [expandedCards, setExpandedCards] = useState(new Set());
   const [showScanAndClub, setShowScanAndClub] = useState(false);
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  
   // Clubbing functionality state
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [showClubbingModal, setShowClubbingModal] = useState(false);
@@ -53,12 +61,11 @@ const OrderManagement = () => {
   const [clubbingLoading, setClubbingLoading] = useState(false);
 
   // For status dropdown + modal
-const [activeAction, setActiveAction] = useState(null);
-const [showConfirmModal, setShowConfirmModal] = useState(false);
-const [pendingStatus, setPendingStatus] = useState('');
-const [pendingOrderId, setPendingOrderId] = useState(null);
-const [updatingStatus, setUpdatingStatus] = useState(false);
-
+  const [activeAction, setActiveAction] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState('');
+  const [pendingOrderId, setPendingOrderId] = useState(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // Detect mobile screen size
   useEffect(() => {
@@ -89,38 +96,36 @@ const [updatingStatus, setUpdatingStatus] = useState(false);
   };
 
   const handleStatusChangeClick = (orderId, status) => {
-  setPendingOrderId(orderId);
-  setPendingStatus(status);
-  setShowConfirmModal(true);
-  setActiveAction(null);
-};
+    setPendingOrderId(orderId);
+    setPendingStatus(status);
+    setShowConfirmModal(true);
+    setActiveAction(null);
+  };
 
+  const confirmStatusChange = async () => {
+    if (!pendingOrderId || !pendingStatus) return;
 
-const confirmStatusChange = async () => {
-  if (!pendingOrderId || !pendingStatus) return;
+    setUpdatingStatus(true);
+    try {
+      const res = await axios.put(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateorderstatus/${pendingOrderId}`,
+        { status: pendingStatus }
+      );
 
-  setUpdatingStatus(true);
-  try {
-    const res = await axios.put(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/admin/updateorderstatus/${pendingOrderId}`,
-      { status: pendingStatus } // 👈 FIXED
-    );
-
-    if (res.status === 200) {
-      toast(`Order status updated to ${pendingStatus}`);
-      fetchOrders();
+      if (res.status === 200) {
+        toast(`Order status updated to ${pendingStatus}`);
+        fetchOrders();
+      }
+    } catch (err) {
+      console.error('Status update failed:', err);
+      toast(err.response?.data?.message || 'Failed to update order status');
+    } finally {
+      setUpdatingStatus(false);
+      setShowConfirmModal(false);
+      setPendingOrderId(null);
+      setPendingStatus('');
     }
-  } catch (err) {
-    console.error('Status update failed:', err);
-    toast(err.response?.data?.message || 'Failed to update order status');
-  } finally {
-    setUpdatingStatus(false);
-    setShowConfirmModal(false);
-    setPendingOrderId(null);
-    setPendingStatus('');
-  }
-};
-
+  };
 
   // Handle order selection for clubbing
   const handleOrderSelection = (orderId) => {
@@ -133,12 +138,12 @@ const confirmStatusChange = async () => {
     });
   };
 
-  // Handle select all orders
+  // Handle select all orders (only current page)
   const handleSelectAll = () => {
-    if (selectedOrders.length === filteredOrders.length) {
+    if (selectedOrders.length === paginatedOrders.length) {
       setSelectedOrders([]);
     } else {
-      setSelectedOrders(filteredOrders.map(order => order._id));
+      setSelectedOrders(paginatedOrders.map(order => order._id));
     }
   };
 
@@ -197,6 +202,7 @@ const confirmStatusChange = async () => {
     }
   };
 
+  // Filter orders
   const filteredOrders = orders.filter(order => {
     const searchFields = [
       order._id,
@@ -214,6 +220,54 @@ const confirmStatusChange = async () => {
     
     return matchesSearch && matchesStatus && matchesPayment;
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredOrders.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus, filterPaymentStatus, rowsPerPage]);
+
+  // Pagination handlers
+  const goToFirstPage = () => setCurrentPage(1);
+  const goToLastPage = () => setCurrentPage(totalPages);
+  const goToNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  const goToPrevPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
+  const goToPage = (page) => setCurrentPage(page);
+
+  // Get page numbers to display
+  const getPageNumbers = () => {
+    const pages = [];
+    const showPages = 5; // Number of page buttons to show
+    
+    if (totalPages <= showPages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    
+    return pages;
+  };
 
   const getStatusColor = (status) => {
     if (!status) return 'bg-slate-100 text-slate-800 border-slate-200';
@@ -429,25 +483,25 @@ const confirmStatusChange = async () => {
             <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
               <Eye size={16} />
             </button>
-                       {order?.shipmentDetails?.pdf ? (
-  <a
-    href={order.shipmentDetails.pdf}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors inline-flex items-center justify-center"
-    title="View Shipment PDF"
-  >
-    <FileTextIcon size={16} />
-  </a>
-) : (
-  <button
-    disabled
-    className="p-2 text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed"
-    title="No PDF available"
-  >
-    <FileTextIcon size={16} />
-  </button>
-)}
+            {order?.shipmentDetails?.pdf ? (
+              <a
+                href={order.shipmentDetails.pdf}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors inline-flex items-center justify-center"
+                title="View Shipment PDF"
+              >
+                <FileTextIcon size={16} />
+              </a>
+            ) : (
+              <button
+                disabled
+                className="p-2 text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed"
+                title="No PDF available"
+              >
+                <FileTextIcon size={16} />
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
@@ -516,35 +570,35 @@ const confirmStatusChange = async () => {
       className="space-y-4 sm:space-y-6"
     >
       {/* Header */}
-<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-  <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
-  <div className="flex items-center space-x-2 sm:space-x-3">
-    {selectedOrders.length > 0 && (
-      <button 
-        onClick={() => setShowClubbingModal(true)}
-        className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
-      >
-        <Users size={isMobile ? 14 : 16} />
-        <span className="hidden sm:inline">Club Selected</span>
-        <span className="sm:hidden">Club</span>
-        <span>({selectedOrders.length})</span>
-      </button>
-    )}
-    {/* New Scan & Club Button */}
-    <button 
-      onClick={() => setShowScanAndClub(true)}
-      className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
-    >
-      <ScanLine size={isMobile ? 14 : 16} />
-      <span className="hidden sm:inline">Scan & Club</span>
-      <span className="sm:hidden">Scan</span>
-    </button>
-    <button className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
-      <Download size={isMobile ? 14 : 16} />
-      <span className="hidden sm:inline">Export</span>
-    </button>
-  </div>
-</div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          {selectedOrders.length > 0 && (
+            <button 
+              onClick={() => setShowClubbingModal(true)}
+              className="bg-blue-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
+            >
+              <Users size={isMobile ? 14 : 16} />
+              <span className="hidden sm:inline">Club Selected</span>
+              <span className="sm:hidden">Club</span>
+              <span>({selectedOrders.length})</span>
+            </button>
+          )}
+          {/* New Scan & Club Button */}
+          <button 
+            onClick={() => setShowScanAndClub(true)}
+            className="bg-green-600 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base"
+          >
+            <ScanLine size={isMobile ? 14 : 16} />
+            <span className="hidden sm:inline">Scan & Club</span>
+            <span className="sm:hidden">Scan</span>
+          </button>
+          <button className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
+            <Download size={isMobile ? 14 : 16} />
+            <span className="hidden sm:inline">Export</span>
+          </button>
+        </div>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
@@ -609,6 +663,28 @@ const confirmStatusChange = async () => {
         } : false}
       >
         <div className="flex flex-col gap-4">
+          {/* Rows Per Page Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                Rows per page:
+              </label>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                className="px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 bg-white text-sm font-medium"
+              >
+                <option value={50}>50</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+                <option value={1000}>1000</option>
+              </select>
+              <span className="text-sm text-slate-600">
+                Showing {startIndex + 1}-{Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length}
+              </span>
+            </div>
+          </div>
+
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
             <input
@@ -650,19 +726,19 @@ const confirmStatusChange = async () => {
       </motion.div>
 
       {/* Select All on Mobile */}
-      {isMobile && filteredOrders.length > 0 && (
+      {isMobile && paginatedOrders.length > 0 && (
         <div className="bg-white rounded-xl shadow-lg p-4">
           <button
             onClick={handleSelectAll}
             className="flex items-center space-x-2 w-full text-left"
           >
-            {selectedOrders.length === filteredOrders.length && filteredOrders.length > 0 ? (
+            {selectedOrders.length === paginatedOrders.length && paginatedOrders.length > 0 ? (
               <CheckSquare size={20} className="text-blue-600" />
             ) : (
               <Square size={20} className="text-slate-400" />
             )}
             <span className="font-medium text-slate-800">
-              Select All Orders ({filteredOrders.length})
+              Select All ({paginatedOrders.length} on this page)
             </span>
           </button>
         </div>
@@ -671,7 +747,7 @@ const confirmStatusChange = async () => {
       {/* Mobile View - Cards */}
       {isMobile ? (
         <div className="space-y-4">
-          {filteredOrders.map((order) => (
+          {paginatedOrders.map((order) => (
             <MobileOrderCard key={order._id} order={order} />
           ))}
         </div>
@@ -687,7 +763,7 @@ const confirmStatusChange = async () => {
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
-                        checked={selectedOrders.length === filteredOrders.length && filteredOrders.length > 0}
+                        checked={selectedOrders.length === paginatedOrders.length && paginatedOrders.length > 0}
                         onChange={handleSelectAll}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
@@ -705,7 +781,7 @@ const confirmStatusChange = async () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredOrders.map((order) => (
+                {paginatedOrders.map((order) => (
                   <motion.tr 
                     key={order._id} 
                     className={`hover:bg-slate-50 transition-colors ${selectedOrders.includes(order._id) ? 'bg-blue-50' : ''}`}
@@ -811,65 +887,160 @@ const confirmStatusChange = async () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <div className="relative">
-  <button
-    onClick={() => setActiveAction(order._id === activeAction ? null : order._id)}
-    className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-    title="Actions"
-  >
-    <MoreVertical size={16} />
-  </button>
+                          <button
+                            onClick={() => setActiveAction(order._id === activeAction ? null : order._id)}
+                            className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Actions"
+                          >
+                            <MoreVertical size={16} />
+                          </button>
 
-  {activeAction === order._id && (
-    <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
-      {[
-        'Drafts',
-        'Ready',
-        'Packed',
-        'Manifested',
-        'Shipped',
-        'Delivered',
-        'Cancelled',
-        'Refunded',
-        'Disputed'
-      ].map(status => (
-        <button
-          key={status}
-          onClick={() => handleStatusChangeClick(order._id, status)}
-          className="w-full text-left px-4 py-2 text-sm hover:bg-slate-100 text-slate-700"
-        >
-          {status}
-        </button>
-      ))}
-    </div>
-  )}
-</div>
+                          {activeAction === order._id && (
+                            <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
+                              {[
+                                'Drafts',
+                                'Ready',
+                                'Packed',
+                                'Manifested',
+                                'Shipped',
+                                'Delivered',
+                                'Cancelled',
+                                'Refunded',
+                                'Disputed'
+                              ].map(status => (
+                                <button
+                                  key={status}
+                                  onClick={() => handleStatusChangeClick(order._id, status)}
+                                  className="w-full text-left px-4 py-2 text-sm hover:bg-slate-100 text-slate-700"
+                                >
+                                  {status}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                       {order?.shipmentDetails?.pdf ? (
-  <a
-    href={order.shipmentDetails.pdf}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors inline-flex items-center justify-center"
-    title="View Shipment PDF"
-  >
-    <FileTextIcon size={16} />
-  </a>
-) : (
-  <button
-    disabled
-    className="p-2 text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed"
-    title="No PDF available"
-  >
-    <FileTextIcon size={16} />
-  </button>
-)}
-
+                        {order?.shipmentDetails?.pdf ? (
+                          <a
+                            href={order.shipmentDetails.pdf}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors inline-flex items-center justify-center"
+                            title="View Shipment PDF"
+                          >
+                            <FileTextIcon size={16} />
+                          </a>
+                        ) : (
+                          <button
+                            disabled
+                            className="p-2 text-slate-400 bg-slate-50 rounded-lg cursor-not-allowed"
+                            title="No PDF available"
+                          >
+                            <FileTextIcon size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {filteredOrders.length > 0 && (
+        <div className="bg-white rounded-xl shadow-lg p-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Page Info */}
+            <div className="text-sm text-slate-600">
+              Page {currentPage} of {totalPages}
+            </div>
+
+            {/* Pagination Buttons */}
+            <div className="flex items-center space-x-2">
+              {/* First Page */}
+              <button
+                onClick={goToFirstPage}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="First Page"
+              >
+                <ChevronsLeft size={18} />
+              </button>
+
+              {/* Previous Page */}
+              <button
+                onClick={goToPrevPage}
+                disabled={currentPage === 1}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Previous Page"
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              {/* Page Numbers */}
+              <div className="flex items-center space-x-1">
+                {getPageNumbers().map((page, index) => (
+                  page === '...' ? (
+                    <span key={`ellipsis-${index}`} className="px-2 text-slate-400">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={page}
+                      onClick={() => goToPage(page)}
+                      className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'border border-slate-200 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  )
+                ))}
+              </div>
+
+              {/* Next Page */}
+              <button
+                onClick={goToNextPage}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Next Page"
+              >
+                <ChevronRight size={18} />
+              </button>
+
+              {/* Last Page */}
+              <button
+                onClick={goToLastPage}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Last Page"
+              >
+                <ChevronsRight size={18} />
+              </button>
+            </div>
+
+            {/* Jump to Page (Desktop only) */}
+            <div className="hidden sm:flex items-center space-x-2">
+              <span className="text-sm text-slate-600">Go to:</span>
+              <input
+                type="number"
+                min="1"
+                max={totalPages}
+                value={currentPage}
+                onChange={(e) => {
+                  const page = parseInt(e.target.value);
+                  if (page >= 1 && page <= totalPages) {
+                    goToPage(page);
+                  }
+                }}
+                className="w-16 px-2 py-1 border border-slate-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -965,49 +1136,48 @@ const confirmStatusChange = async () => {
       )}
 
       {/* Scan & Club Modal */}
-<ScanAndClub
-  isOpen={showScanAndClub}
-  onClose={() => setShowScanAndClub(false)}
-  orders={orders}
-  onClubSuccess={() => {
-    fetchOrders(); // Refresh orders list
-    setShowScanAndClub(false);
-  }}
-/>
+      <ScanAndClub
+        isOpen={showScanAndClub}
+        onClose={() => setShowScanAndClub(false)}
+        orders={orders}
+        onClubSuccess={() => {
+          fetchOrders(); // Refresh orders list
+          setShowScanAndClub(false);
+        }}
+      />
 
-{/* Confirm Status Change Modal */}
-{showConfirmModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-blur bg-opacity-50 p-4">
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="bg-amber-100 rounded-2xl shadow-2xl p-6 max-w-sm w-full"
-    >
-      <h3 className="text-lg font-bold text-slate-800 mb-3">Confirm Status Change</h3>
-      <p className="text-slate-600 mb-6">
-        Are you sure you want to change the status to{' '}
-        <span className="font-semibold text-blue-600">{pendingStatus}</span>?
-      </p>
+      {/* Confirm Status Change Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-blur bg-opacity-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-amber-100 rounded-2xl shadow-2xl p-6 max-w-sm w-full"
+          >
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Confirm Status Change</h3>
+            <p className="text-slate-600 mb-6">
+              Are you sure you want to change the status to{' '}
+              <span className="font-semibold text-blue-600">{pendingStatus}</span>?
+            </p>
 
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={() => setShowConfirmModal(false)}
-          className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={confirmStatusChange}
-          disabled={updatingStatus}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          {updatingStatus ? 'Updating...' : 'Confirm'}
-        </button>
-      </div>
-    </motion.div>
-  </div>
-)}
-
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                disabled={updatingStatus}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updatingStatus ? 'Updating...' : 'Confirm'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 };
