@@ -16,9 +16,9 @@
     "jspdf": "^3.0.3",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.542.0",
-    "next": "15.5.2",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "next": "^15.5.7",
+    "react": "^19.1.4",
+    "react-dom": "^19.1.4",
     "react-qr-barcode-scanner": "^2.1.9",
     "react-toastify": "^11.0.5",
     "shadcn-ui": "^0.9.5"
@@ -27,7 +27,7 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4"
   }
 }
