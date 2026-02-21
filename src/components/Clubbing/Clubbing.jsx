@@ -4,28 +4,20 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Users,
-  Eye,
-  Calendar,
   User,
-  Phone,
-  DollarSign,
   Package,
   Search,
   Filter,
   Download,
-  FileText,
-  Globe,
-  Weight,
-  Mail,
   ChevronDown,
   ChevronUp,
   Truck,
-  MapPin,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
-  ExternalLink,
   FileTextIcon,
+  Printer,
+  Loader2,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -38,8 +30,8 @@ const Clubbing = () => {
   const [expandedClubbing, setExpandedClubbing] = useState(null);
   const [trackingModalOpen, setTrackingModalOpen] = useState(false);
   const [currentTrackingNumber, setCurrentTrackingNumber] = useState(null);
+  const [bulkPrinting, setBulkPrinting] = useState(null);
 
-  // Pagination for orders within expanded clubbing
   const [orderPage, setOrderPage] = useState(1);
   const ordersPerPage = 10;
 
@@ -66,7 +58,6 @@ const Clubbing = () => {
     const now = new Date();
     return clubbings.filter((clubbing) => {
       const clubbingDate = new Date(clubbing.clubbedAt);
-
       switch (dateFilter) {
         case "today":
           return clubbingDate.toDateString() === now.toDateString();
@@ -94,39 +85,25 @@ const Clubbing = () => {
 
   const getStatusColor = (status) => {
     if (!status) return "bg-slate-100 text-slate-800";
-
     switch (status.toLowerCase()) {
-      case "delivered":
-        return "bg-green-100 text-green-800";
-      case "manifested":
-        return "bg-purple-100 text-purple-800";
-      case "in transit":
-        return "bg-blue-100 text-blue-800";
-      case "processing":
-        return "bg-orange-100 text-orange-800";
-      case "packed":
-        return "bg-indigo-100 text-indigo-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "cancelled":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-slate-100 text-slate-800";
+      case "delivered": return "bg-green-100 text-green-800";
+      case "manifested": return "bg-purple-100 text-purple-800";
+      case "in transit": return "bg-blue-100 text-blue-800";
+      case "processing": return "bg-orange-100 text-orange-800";
+      case "packed": return "bg-indigo-100 text-indigo-800";
+      case "pending": return "bg-yellow-100 text-yellow-800";
+      case "cancelled": return "bg-red-100 text-red-800";
+      default: return "bg-slate-100 text-slate-800";
     }
   };
 
   const getPaymentStatusColor = (status) => {
     if (!status) return "bg-slate-100 text-slate-800";
-
     switch (status.toLowerCase()) {
-      case "payment received":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "failed":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-slate-100 text-slate-800";
+      case "payment received": return "bg-green-100 text-green-800";
+      case "pending": return "bg-yellow-100 text-yellow-800";
+      case "failed": return "bg-red-100 text-red-800";
+      default: return "bg-slate-100 text-slate-800";
     }
   };
 
@@ -163,8 +140,148 @@ const Clubbing = () => {
     return Math.ceil(totalOrders / ordersPerPage);
   };
 
+  /**
+   * Resolves a pdf field to a full URL.
+   * External http/https URLs are used as-is.
+   * Server-relative paths are prefixed with NEXT_PUBLIC_API_URL.
+   */
+  const resolveLabel = (pdf) => {
+    if (!pdf) return null;
+    if (pdf.startsWith("http://") || pdf.startsWith("https://")) return pdf;
+    const base = process.env.NEXT_PUBLIC_API_URL || "";
+    return `${base}${pdf.startsWith("/") ? "" : "/"}${pdf}`;
+  };
+
+  /**
+   * Bulk print: opens a single popup window that embeds all label URLs
+   * as iframes stacked vertically. No fetch/blob — each iframe loads
+   * the URL directly so CORS is never an issue.
+   * A status bar tracks load progress and enables "Print All" when ready.
+   */
+  const handleBulkPrint = (clubbing) => {
+    const labelUrls = clubbing.clubbedOrders
+      .map((order) => resolveLabel(order?.shipmentDetails?.pdf))
+      .filter(Boolean);
+
+    if (labelUrls.length === 0) {
+      toast.warning("No labels available to print for this clubbing.");
+      return;
+    }
+
+    setBulkPrinting(clubbing._id);
+
+    const printWindow = window.open("", "_blank", "width=960,height=800");
+
+    if (!printWindow) {
+      toast.error(
+        "Popup blocked! Please allow popups for this site and try again."
+      );
+      setBulkPrinting(null);
+      return;
+    }
+
+    const totalFrames = labelUrls.length;
+
+    // Each iframe is A4-height (1122px at 96dpi). Stacked vertically.
+    // On @media print each becomes its own page via page-break-after.
+    const iframeTags = labelUrls
+      .map(
+        (url, i) =>
+          `<iframe
+            id="lbl_${i}"
+            src="${url}"
+            style="display:block;width:100%;height:1122px;border:none;page-break-after:always;break-after:page;"
+          ></iframe>`
+      )
+      .join("\n");
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Bulk Labels — ${clubbing.clubName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f1f5f9; font-family: sans-serif; }
+    #bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: #1e293b; color: #fff;
+      padding: 10px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    #msg { font-size: 13px; flex: 1; }
+    #progress {
+      height: 4px; background: #334155; border-radius: 2px;
+      flex: 1; max-width: 200px; overflow: hidden;
+    }
+    #bar div#progress-fill {
+      height: 100%; background: #f97316;
+      width: 0%; transition: width 0.3s;
+      border-radius: 2px;
+    }
+    #printBtn {
+      background: #f97316; color: #fff; border: none;
+      padding: 8px 18px; border-radius: 6px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    #printBtn:disabled { background: #475569; cursor: not-allowed; }
+    #wrapper { padding-top: 48px; }
+    @media print {
+      #bar { display: none !important; }
+      #wrapper { padding-top: 0 !important; }
+      iframe {
+        width: 100% !important;
+        height: 100vh !important;
+        border: none !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <span id="msg">Loading labels… 0 / ${totalFrames}</span>
+    <div id="progress"><div id="progress-fill"></div></div>
+    <button id="printBtn" disabled onclick="window.print()">🖨 Print All</button>
+  </div>
+  <div id="wrapper">
+    ${iframeTags}
+  </div>
+  <script>
+    var total = ${totalFrames};
+    var loaded = 0;
+    function onFrameSettled() {
+      loaded++;
+      var pct = Math.round((loaded / total) * 100);
+      document.getElementById('progress-fill').style.width = pct + '%';
+      if (loaded >= total) {
+        document.getElementById('msg').textContent =
+          'All ' + total + ' label(s) ready — click Print All';
+        document.getElementById('printBtn').disabled = false;
+      } else {
+        document.getElementById('msg').textContent =
+          'Loading labels… ' + loaded + ' / ' + total;
+      }
+    }
+    document.querySelectorAll('iframe').forEach(function(f) {
+      f.addEventListener('load', onFrameSettled);
+      f.addEventListener('error', onFrameSettled);
+    });
+  </script>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    setBulkPrinting(null);
+
+    toast.success(
+      `Opened bulk print window for ${labelUrls.length} label(s). Click "Print All" once they finish loading.`
+    );
+  };
+
   const filteredClubbings = getDateFilteredClubbings().filter((clubbing) => {
-    // Combine clubbing-level fields
     const clubbingFields = [
       clubbing.clubName,
       clubbing.usernames,
@@ -175,30 +292,24 @@ const Clubbing = () => {
       .join(" ")
       .toLowerCase();
 
-    // Combine order invoice numbers
     const orderInvoices = clubbing.clubbedOrders
       .map((order) => order.invoiceNo)
       .join(" ")
       .toLowerCase();
 
-    const searchFields = `${clubbingFields} ${orderInvoices}`;
-
-    return searchFields.includes(searchTerm.toLowerCase());
+    return `${clubbingFields} ${orderInvoices}`.includes(
+      searchTerm.toLowerCase()
+    );
   });
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-slate-800">
-          Clubbing Management
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-800">Clubbing Management</h1>
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           <div className="p-6 space-y-4">
             {[...Array(3)].map((_, index) => (
-              <div
-                key={index}
-                className="animate-pulse border-b border-slate-200 pb-4 last:border-b-0"
-              >
+              <div key={index} className="animate-pulse border-b border-slate-200 pb-4 last:border-b-0">
                 <div className="flex items-center justify-between">
                   <div className="space-y-2">
                     <div className="h-6 bg-slate-200 rounded w-48"></div>
@@ -226,9 +337,7 @@ const Clubbing = () => {
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">
-          Clubbing Management
-        </h1>
+        <h1 className="text-2xl font-bold text-slate-800">Clubbing Management</h1>
         <div className="flex items-center space-x-3">
           <button className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2">
             <Download size={16} />
@@ -240,17 +349,12 @@ const Clubbing = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl shadow-lg">
-          <div className="text-2xl font-bold text-slate-800">
-            {filteredClubbings.length}
-          </div>
+          <div className="text-2xl font-bold text-slate-800">{filteredClubbings.length}</div>
           <div className="text-sm text-slate-600">Total Clubbings</div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-lg">
           <div className="text-2xl font-bold text-blue-600">
-            {filteredClubbings.reduce(
-              (sum, c) => sum + c.clubbedOrders.length,
-              0
-            )}
+            {filteredClubbings.reduce((sum, c) => sum + c.clubbedOrders.length, 0)}
           </div>
           <div className="text-sm text-slate-600">Total Orders</div>
         </div>
@@ -262,10 +366,7 @@ const Clubbing = () => {
         </div>
         <div className="bg-white p-4 rounded-xl shadow-lg">
           <div className="text-2xl font-bold text-purple-600">
-            ₹
-            {filteredClubbings
-              .reduce((sum, c) => sum + calculateTotalValue(c), 0)
-              .toLocaleString()}
+            ₹{filteredClubbings.reduce((sum, c) => sum + calculateTotalValue(c), 0).toLocaleString()}
           </div>
           <div className="text-sm text-slate-600">Total Value</div>
         </div>
@@ -275,10 +376,7 @@ const Clubbing = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
-            <Search
-              size={20}
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
-            />
+            <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search by club name, user details, order count, order invoice or value..."
@@ -288,10 +386,7 @@ const Clubbing = () => {
             />
           </div>
           <div className="relative">
-            <Filter
-              size={20}
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"
-            />
+            <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
@@ -315,6 +410,10 @@ const Clubbing = () => {
               ? getPaginatedOrders(clubbing.clubbedOrders)
               : [];
           const totalPages = getTotalPages(clubbing.clubbedOrders.length);
+          const labelsAvailable = clubbing.clubbedOrders.filter(
+            (o) => o?.shipmentDetails?.pdf
+          ).length;
+          const isBulkPrinting = bulkPrinting === clubbing._id;
 
           return (
             <motion.div
@@ -332,18 +431,43 @@ const Clubbing = () => {
                         <Users size={20} className="text-blue-600" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-800">
-                          {clubbing.clubName}
-                        </h3>
+                        <h3 className="text-lg font-semibold text-slate-800">{clubbing.clubName}</h3>
                         <p className="text-sm text-slate-500">
-                          Created{" "}
-                          {new Date(clubbing.clubbedAt).toLocaleDateString()}
+                          Created {new Date(clubbing.clubbedAt).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center space-x-4">
+                    {/* Bulk Print Button */}
+                    <button
+                      onClick={() => handleBulkPrint(clubbing)}
+                      disabled={isBulkPrinting || labelsAvailable === 0}
+                      title={
+                        labelsAvailable === 0
+                          ? "No labels available"
+                          : `Bulk print ${labelsAvailable} label(s)`
+                      }
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors
+                        ${
+                          labelsAvailable === 0
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : isBulkPrinting
+                            ? "bg-orange-100 text-orange-600 cursor-wait"
+                            : "bg-orange-50 text-orange-600 hover:bg-orange-100 border border-orange-200"
+                        }`}
+                    >
+                      {isBulkPrinting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Printer size={16} />
+                      )}
+                      <span>
+                        {isBulkPrinting ? "Preparing..." : `Bulk Print (${labelsAvailable})`}
+                      </span>
+                    </button>
+
                     <div className="text-right">
                       <div className="text-xl font-bold text-green-600">
                         ₹{calculateTotalValue(clubbing).toLocaleString()}
@@ -366,27 +490,19 @@ const Clubbing = () => {
                 {/* Quick Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div className="bg-slate-50 p-3 rounded-lg">
-                    <div className="text-lg font-bold text-slate-800">
-                      {clubbing.clubbedOrders.length}
-                    </div>
+                    <div className="text-lg font-bold text-slate-800">{clubbing.clubbedOrders.length}</div>
                     <div className="text-xs text-slate-600">Orders</div>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg">
-                    <div className="text-lg font-bold text-slate-800">
-                      {clubbing.userIds.length}
-                    </div>
+                    <div className="text-lg font-bold text-slate-800">{clubbing.userIds.length}</div>
                     <div className="text-xs text-slate-600">Users</div>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg">
-                    <div className="text-lg font-bold text-slate-800">
-                      {getTotalWeight(clubbing)} kg
-                    </div>
+                    <div className="text-lg font-bold text-slate-800">{getTotalWeight(clubbing)} kg</div>
                     <div className="text-xs text-slate-600">Total Weight</div>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg">
-                    <div className="text-lg font-bold text-slate-800">
-                      {Object.keys(statusCounts).length}
-                    </div>
+                    <div className="text-lg font-bold text-slate-800">{Object.keys(statusCounts).length}</div>
                     <div className="text-xs text-slate-600">Status Types</div>
                   </div>
                 </div>
@@ -396,9 +512,7 @@ const Clubbing = () => {
                   {Object.entries(statusCounts).map(([status, count]) => (
                     <span
                       key={status}
-                      className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                        status
-                      )}`}
+                      className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}
                     >
                       {status}: {count}
                     </span>
@@ -413,29 +527,22 @@ const Clubbing = () => {
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {clubbing.userIds.slice(0, 3).map((user) => (
-                      <div
-                        key={user._id}
-                        className="bg-white rounded-lg p-2 text-xs"
-                      >
-                        <div className="font-medium text-slate-800">
-                          {user.fullname}
-                        </div>
+                      <div key={user._id} className="bg-white rounded-lg p-2 text-xs">
+                        <div className="font-medium text-slate-800">{user.fullname}</div>
                         <div className="text-slate-600">{user.email}</div>
                       </div>
                     ))}
                     {clubbing.userIds.length > 3 && (
                       <div className="bg-white rounded-lg p-2 text-xs flex items-center text-slate-600">
                         <MoreHorizontal size={14} />
-                        <span className="ml-1">
-                          +{clubbing.userIds.length - 3} more
-                        </span>
+                        <span className="ml-1">+{clubbing.userIds.length - 3} more</span>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Expanded Orders Details */}
+              {/* Expanded Orders */}
               {expandedClubbing === clubbing._id && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
@@ -449,14 +556,10 @@ const Clubbing = () => {
                         <Package size={18} className="mr-2" />
                         Orders ({clubbing.clubbedOrders.length})
                       </h4>
-
-                      {/* Pagination Controls */}
                       {totalPages > 1 && (
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() =>
-                              setOrderPage(Math.max(1, orderPage - 1))
-                            }
+                            onClick={() => setOrderPage(Math.max(1, orderPage - 1))}
                             disabled={orderPage === 1}
                             className="p-2 bg-white rounded-lg hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -466,9 +569,7 @@ const Clubbing = () => {
                             Page {orderPage} of {totalPages}
                           </span>
                           <button
-                            onClick={() =>
-                              setOrderPage(Math.min(totalPages, orderPage + 1))
-                            }
+                            onClick={() => setOrderPage(Math.min(totalPages, orderPage + 1))}
                             disabled={orderPage === totalPages}
                             className="p-2 bg-white rounded-lg hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -478,89 +579,50 @@ const Clubbing = () => {
                       )}
                     </div>
 
-                    {/* Orders Table */}
                     <div className="bg-white rounded-lg overflow-hidden shadow-sm">
                       <div className="overflow-x-auto">
                         <table className="w-full">
                           <thead className="bg-slate-100">
                             <tr>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Order
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Customer
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Destination
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Items
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Value
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Status
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">
-                                Actions
-                              </th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Order</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Customer</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Destination</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Items</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Value</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Status</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200">
                             {paginatedOrders.map((order) => (
                               <tr key={order._id} className="hover:bg-slate-50">
                                 <td className="px-4 py-3">
-                                  <div>
-                                    <div className="font-medium text-slate-800 text-sm">
-                                      {order.invoiceNo}
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {new Date(
-                                        order.invoiceDate
-                                      ).toLocaleDateString()}
-                                    </div>
+                                  <div className="font-medium text-slate-800 text-sm">{order.invoiceNo}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {new Date(order.invoiceDate).toLocaleDateString()}
                                   </div>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div>
-                                    <div className="font-medium text-slate-800 text-sm">
-                                      {order.firstName} {order.lastName}
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {order.mobile}
-                                    </div>
+                                  <div className="font-medium text-slate-800 text-sm">
+                                    {order.firstName} {order.lastName}
                                   </div>
+                                  <div className="text-xs text-slate-500">{order.mobile}</div>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="text-sm">
-                                    <div className="font-medium text-slate-800">
-                                      {order.country}
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {order.city}
-                                    </div>
-                                  </div>
+                                  <div className="font-medium text-slate-800 text-sm">{order.country}</div>
+                                  <div className="text-xs text-slate-500">{order.city}</div>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="text-sm">
-                                    <div className="font-medium text-slate-800">
-                                      {order.productItems.length} item(s)
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {order.weight} kg
-                                    </div>
+                                  <div className="font-medium text-slate-800 text-sm">
+                                    {order.productItems.length} item(s)
                                   </div>
+                                  <div className="text-xs text-slate-500">{order.weight} kg</div>
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="font-medium text-green-600 text-sm">
-                                    ₹
-                                    {order.productItems
+                                    ₹{order.productItems
                                       .reduce(
-                                        (sum, item) =>
-                                          sum +
-                                          item.productPrice *
-                                            item.productQuantity,
+                                        (sum, item) => sum + item.productPrice * item.productQuantity,
                                         0
                                       )
                                       .toLocaleString()}
@@ -569,16 +631,12 @@ const Clubbing = () => {
                                 <td className="px-4 py-3">
                                   <div className="space-y-1">
                                     <span
-                                      className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                        order.orderStatus
-                                      )}`}
+                                      className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}
                                     >
                                       {order.orderStatus}
                                     </span>
                                     <div
-                                      className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(
-                                        order.paymentStatus
-                                      )}`}
+                                      className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(order.paymentStatus)}`}
                                     >
                                       {order.paymentStatus}
                                     </div>
@@ -586,10 +644,9 @@ const Clubbing = () => {
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center space-x-1">
-                                    {/* PDF Button */}
                                     {order.shipmentDetails?.pdf && (
                                       <a
-                                        href={order.shipmentDetails.pdf}
+                                        href={resolveLabel(order.shipmentDetails.pdf)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -598,16 +655,12 @@ const Clubbing = () => {
                                         <FileTextIcon size={17} />
                                       </a>
                                     )}
-
-                                    {/* Tracking Button */}
                                     {order.shipmentDetails?.trackingNumber && (
                                       <button
                                         className="p-1 text-green-600 hover:cursor-pointer rounded transition-colors"
                                         title="View Tracking Number"
                                         onClick={() => {
-                                          setCurrentTrackingNumber(
-                                            order.shipmentDetails.trackingNumber
-                                          );
+                                          setCurrentTrackingNumber(order.shipmentDetails.trackingNumber);
                                           setTrackingModalOpen(true);
                                         }}
                                       >
@@ -623,15 +676,11 @@ const Clubbing = () => {
                       </div>
                     </div>
 
-                    {/* Pagination Info */}
                     {totalPages > 1 && (
                       <div className="mt-4 text-center text-sm text-slate-600">
                         Showing {(orderPage - 1) * ordersPerPage + 1} to{" "}
-                        {Math.min(
-                          orderPage * ordersPerPage,
-                          clubbing.clubbedOrders.length
-                        )}{" "}
-                        of {clubbing.clubbedOrders.length} orders
+                        {Math.min(orderPage * ordersPerPage, clubbing.clubbedOrders.length)} of{" "}
+                        {clubbing.clubbedOrders.length} orders
                       </div>
                     )}
                   </div>
@@ -642,13 +691,13 @@ const Clubbing = () => {
         })}
       </div>
 
+      {/* Tracking Modal */}
       {trackingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/30 p-4">
           <div className="bg-white rounded-xl p-6 w-full max-w-md sm:max-w-lg shadow-lg relative">
             <h3 className="text-lg sm:text-xl font-semibold text-slate-800 mb-4 text-center sm:text-left">
               Tracking Number
             </h3>
-
             <div className="flex flex-col sm:flex-row items-center sm:justify-between border border-slate-200 rounded-lg p-3 bg-slate-50 mb-4">
               <span className="font-mono text-lg sm:text-xl text-slate-800 break-all text-center sm:text-left">
                 {currentTrackingNumber}
@@ -664,7 +713,6 @@ const Clubbing = () => {
                 Copy
               </button>
             </div>
-
             <button
               onClick={() => setTrackingModalOpen(false)}
               className="absolute top-3 right-3 text-slate-500 hover:text-slate-800 text-2xl sm:text-3xl"
@@ -679,9 +727,7 @@ const Clubbing = () => {
         <div className="bg-white rounded-2xl shadow-lg p-12">
           <div className="text-center">
             <Users size={48} className="mx-auto text-slate-400 mb-4" />
-            <p className="text-slate-600">
-              No clubbings found matching your criteria
-            </p>
+            <p className="text-slate-600">No clubbings found matching your criteria</p>
           </div>
         </div>
       )}
