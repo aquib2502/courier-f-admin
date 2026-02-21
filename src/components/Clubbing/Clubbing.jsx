@@ -366,7 +366,7 @@ const Clubbing = () => {
         </div>
         <div className="bg-white p-4 rounded-xl shadow-lg">
           <div className="text-2xl font-bold text-purple-600">
-            ₹{filteredClubbings.reduce((sum, c) => sum + calculateTotalValue(c), 0).toLocaleString()}
+            ${filteredClubbings.reduce((sum, c) => sum + calculateTotalValue(c), 0).toLocaleString()}
           </div>
           <div className="text-sm text-slate-600">Total Value</div>
         </div>
@@ -470,7 +470,7 @@ const Clubbing = () => {
 
                     <div className="text-right">
                       <div className="text-xl font-bold text-green-600">
-                        ₹{calculateTotalValue(clubbing).toLocaleString()}
+                        ${calculateTotalValue(clubbing).toLocaleString()}
                       </div>
                       <div className="text-xs text-slate-500">Total Value</div>
                     </div>
@@ -620,7 +620,7 @@ const Clubbing = () => {
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="font-medium text-green-600 text-sm">
-                                    ₹{order.productItems
+                                    ${order.productItems
                                       .reduce(
                                         (sum, item) => sum + item.productPrice * item.productQuantity,
                                         0
