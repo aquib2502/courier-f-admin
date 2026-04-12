@@ -30,11 +30,12 @@ const RateManagement = () => {
 
   // Package types based on country
   const packagesByCountry = {
-    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium', 'Express', 'Premium Self', 'QuickExpress'],
-    'United Kingdom': ['Direct', 'First Class', 'Premium', 'QuickExpress'],
-    'Canada': ['Direct', 'First Class', 'Premium', 'Special', 'QuickExpress'],
+    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium DPD', 'Express', 'Premium Self', 'QuickExpress'],
+    'United Kingdom': ['Direct', 'First Class', 'Premium DPD', 'QuickExpress'],
+    'Canada': ['Direct', 'First Class', 'Premium DPD', 'Special', 'QuickExpress'],
     'Australia': ['Direct', 'QuickExpress'],
     'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide', 'QuickExpress'],
+    'United States (Remote)': ['Premium Self']
   };
 
   // Get available packages for selected country
@@ -58,19 +59,29 @@ const RateManagement = () => {
     }
   };
 
-  // ================== FETCH COUNTRIES ==================
-  const fetchCountries = async () => {
-    try {
-      const { data } = await axios.get(COUNTRIES_API_URL, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      setCountries(data);
-    } catch (error) {
-      console.error('Failed to fetch countries:', error);
-    }
-  };
+// ================== FETCH COUNTRIES ==================
+const fetchCountries = async () => {
+  try {
+    const { data } = await axios.get(COUNTRIES_API_URL, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+
+    // Add manual country
+    const manualCountry = { code: "US-REMOTE", name: "United States (Remote)" };
+
+    // Make sure it is not duplicated
+    const countryExists = data.some(c => c.name === manualCountry.name);
+
+    const updatedCountries = countryExists ? data : [...data, manualCountry];
+
+    setCountries(updatedCountries);
+  } catch (error) {
+    console.error('Failed to fetch countries:', error);
+  }
+};
+
 
   useEffect(() => {
     fetchRates();

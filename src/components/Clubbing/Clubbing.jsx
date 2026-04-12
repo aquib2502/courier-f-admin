@@ -158,44 +158,28 @@ const Clubbing = () => {
    * the URL directly so CORS is never an issue.
    * A status bar tracks load progress and enables "Print All" when ready.
    */
-  const handleBulkPrint = (clubbing) => {
-    const labelUrls = clubbing.clubbedOrders
-      .map((order) => resolveLabel(order?.shipmentDetails?.pdf))
-      .filter(Boolean);
+const handleBulkPrint = async (clubbing) => {
+  const labelUrls = clubbing.clubbedOrders
+    .map((order) => resolveLabel(order?.shipmentDetails?.pdf))
+    .filter(Boolean);
 
-    if (labelUrls.length === 0) {
-      toast.warning("No labels available to print for this clubbing.");
-      return;
-    }
+  if (labelUrls.length === 0) {
+    toast.warning("No labels available to print for this clubbing.");
+    return;
+  }
 
-    setBulkPrinting(clubbing._id);
+  setBulkPrinting(clubbing._id);
 
-    const printWindow = window.open("", "_blank", "width=960,height=800");
+  const printWindow = window.open("", "_blank", "width=960,height=800");
 
-    if (!printWindow) {
-      toast.error(
-        "Popup blocked! Please allow popups for this site and try again."
-      );
-      setBulkPrinting(null);
-      return;
-    }
+  if (!printWindow) {
+    toast.error("Popup blocked! Please allow popups for this site and try again.");
+    setBulkPrinting(null);
+    return;
+  }
 
-    const totalFrames = labelUrls.length;
-
-    // Each iframe is A4-height (1122px at 96dpi). Stacked vertically.
-    // On @media print each becomes its own page via page-break-after.
-    const iframeTags = labelUrls
-      .map(
-        (url, i) =>
-          `<iframe
-            id="lbl_${i}"
-            src="${url}"
-            style="display:block;width:100%;height:1122px;border:none;page-break-after:always;break-after:page;"
-          ></iframe>`
-      )
-      .join("\n");
-
-    printWindow.document.write(`<!DOCTYPE html>
+  // Write a loading shell immediately so the window isn't blank
+  printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Bulk Labels — ${clubbing.clubName}</title>
@@ -206,81 +190,95 @@ const Clubbing = () => {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
       background: #1e293b; color: #fff;
       padding: 10px 16px;
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
     }
     #msg { font-size: 13px; flex: 1; }
-    #progress {
-      height: 4px; background: #334155; border-radius: 2px;
-      flex: 1; max-width: 200px; overflow: hidden;
-    }
-    #bar div#progress-fill {
-      height: 100%; background: #f97316;
-      width: 0%; transition: width 0.3s;
-      border-radius: 2px;
-    }
+    #progress { height: 4px; background: #334155; border-radius: 2px; flex: 1; max-width: 200px; overflow: hidden; }
+    #bar div#progress-fill { height: 100%; background: #f97316; width: 0%; transition: width 0.3s; border-radius: 2px; }
     #printBtn {
       background: #f97316; color: #fff; border: none;
       padding: 8px 18px; border-radius: 6px;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-      white-space: nowrap;
+      font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     #printBtn:disabled { background: #475569; cursor: not-allowed; }
-    #wrapper { padding-top: 48px; }
+    #wrapper { padding-top: 52px; }
+    .label-frame {
+      display: block; width: 100%; height: 100vh;
+      border: none; page-break-after: always; break-after: page;
+    }
     @media print {
       #bar { display: none !important; }
       #wrapper { padding-top: 0 !important; }
-      iframe {
-        width: 100% !important;
-        height: 100vh !important;
-        border: none !important;
-        page-break-after: always !important;
-        break-after: page !important;
-      }
+      .label-frame { height: 100vh !important; page-break-after: always !important; break-after: page !important; }
     }
   </style>
 </head>
 <body>
   <div id="bar">
-    <span id="msg">Loading labels… 0 / ${totalFrames}</span>
+    <span id="msg">Fetching labels… 0 / ${labelUrls.length}</span>
     <div id="progress"><div id="progress-fill"></div></div>
     <button id="printBtn" disabled onclick="window.print()">🖨 Print All</button>
   </div>
-  <div id="wrapper">
-    ${iframeTags}
-  </div>
-  <script>
-    var total = ${totalFrames};
-    var loaded = 0;
-    function onFrameSettled() {
-      loaded++;
-      var pct = Math.round((loaded / total) * 100);
-      document.getElementById('progress-fill').style.width = pct + '%';
-      if (loaded >= total) {
-        document.getElementById('msg').textContent =
-          'All ' + total + ' label(s) ready — click Print All';
-        document.getElementById('printBtn').disabled = false;
-      } else {
-        document.getElementById('msg').textContent =
-          'Loading labels… ' + loaded + ' / ' + total;
-      }
-    }
-    document.querySelectorAll('iframe').forEach(function(f) {
-      f.addEventListener('load', onFrameSettled);
-      f.addEventListener('error', onFrameSettled);
-    });
-  </script>
+  <div id="wrapper"></div>
 </body>
 </html>`);
+  printWindow.document.close();
 
-    printWindow.document.close();
-    setBulkPrinting(null);
-
-    toast.success(
-      `Opened bulk print window for ${labelUrls.length} label(s). Click "Print All" once they finish loading.`
+  // Fetch all PDFs as blobs and inject as object URLs — bypasses the PDF viewer chrome entirely
+  try {
+    let fetched = 0;
+    const blobUrls = await Promise.all(
+      labelUrls.map(async (url) => {
+        try {
+          const res = await fetch(url, { credentials: "include" });
+          const blob = await res.blob();
+          fetched++;
+          const pct = Math.round((fetched / labelUrls.length) * 100);
+          if (printWindow && !printWindow.closed) {
+            const fill = printWindow.document.getElementById("progress-fill");
+            const msg = printWindow.document.getElementById("msg");
+            if (fill) fill.style.width = pct + "%";
+            if (msg) msg.textContent = `Fetching labels… ${fetched} / ${labelUrls.length}`;
+          }
+          return URL.createObjectURL(blob);
+        } catch {
+          fetched++;
+          return null;
+        }
+      })
     );
-  };
 
+    const wrapper = printWindow.document?.getElementById("wrapper");
+    const msg = printWindow.document?.getElementById("msg");
+    const btn = printWindow.document?.getElementById("printBtn");
+
+    if (!wrapper || printWindow.closed) {
+      setBulkPrinting(null);
+      return;
+    }
+
+    blobUrls.forEach((blobUrl) => {
+      if (!blobUrl) return;
+      // Use <embed> with the blob URL — renders the raw PDF, no viewer chrome
+      const embed = printWindow.document.createElement("embed");
+      embed.src = blobUrl;
+      embed.type = "application/pdf";
+      embed.className = "label-frame";
+      wrapper.appendChild(embed);
+    });
+
+    const validCount = blobUrls.filter(Boolean).length;
+    if (msg) msg.textContent = `${validCount} label(s) ready — click Print All`;
+    if (btn) btn.disabled = false;
+
+    toast.success(`Opened bulk print window for ${validCount} label(s). Click "Print All" to print.`);
+  } catch (err) {
+    console.error("Bulk print error:", err);
+    toast.error("Failed to load labels for printing.");
+  } finally {
+    setBulkPrinting(null);
+  }
+};
   const filteredClubbings = getDateFilteredClubbings().filter((clubbing) => {
     const clubbingFields = [
       clubbing.clubName,

@@ -34,7 +34,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Link2,
 } from 'lucide-react';
 import axios from 'axios';
 import { ToastContainer,toast } from 'react-toastify';
@@ -188,7 +189,7 @@ const OrderManagement = () => {
       });
 
       if (response.status === 201) {
-        alert('Orders clubbed successfully!');
+        toast.success('Orders clubbed successfully!');
         setShowClubbingModal(false);
         setSelectedOrders([]);
         setClubName('');
@@ -196,7 +197,9 @@ const OrderManagement = () => {
       }
     } catch (error) {
       console.error('Failed to club orders:', error);
-      alert(error.response?.data?.message || 'Failed to club orders');
+      // Show specific conflict message from server if available
+      const errMsg = error.response?.data?.message || 'Failed to club orders';
+      toast.error(errMsg);
     } finally {
       setClubbingLoading(false);
     }
@@ -321,6 +324,19 @@ const OrderManagement = () => {
     return [...new Set(orders.map(order => order.orderStatus).filter(Boolean))];
   };
 
+  // Clubbing badge component
+  const ClubbingBadge = ({ clubInfo }) => {
+    if (!clubInfo?.clubbed) return null;
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200 whitespace-nowrap"
+        title={`Clubbed in ${clubInfo.clubName}`}
+      >
+        Clubbed In  {clubInfo.clubName}
+      </span>
+    );
+  };
+
   // Mobile Order Card Component
   const MobileOrderCard = ({ order }) => {
     const isExpanded = expandedCards.has(order._id);
@@ -355,6 +371,12 @@ const OrderManagement = () => {
                 <Calendar size={12} className="mr-1" />
                 {new Date(order.invoiceDate).toLocaleDateString()}
               </p>
+              {/* Clubbing badge on mobile */}
+              {order.clubInfo?.clubbed && (
+                <div className="mt-1">
+                  <ClubbingBadge clubInfo={order.clubInfo} />
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -799,8 +821,8 @@ const OrderManagement = () => {
                     </td>
                     
                     <td className="px-6 py-4">
-                      <div>
-                        <p className="text-sm text-slate-600 flex items-center mt-1">
+                      <div className="space-y-1">
+                        <p className="text-sm text-slate-600 flex items-center">
                           <FileText size={12} className="mr-1" />
                           {order.invoiceNo}
                         </p>
@@ -808,6 +830,7 @@ const OrderManagement = () => {
                           <Calendar size={12} className="mr-1" />
                           {new Date(order.invoiceDate).toLocaleDateString()}
                         </p>
+                        
                       </div>
                     </td>
                     
@@ -870,8 +893,12 @@ const OrderManagement = () => {
                           <span>{getStatusIcon(order.orderStatus)}</span>
                           <span>{order.orderStatus}</span>
                         </div>
+                        <div>
+                          {/* Clubbing badge in Order Details cell */}
+                        <ClubbingBadge clubInfo={order.clubInfo} />
+                        </div>
                         {order.manifestStatus && (
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs ml-1 text-slate-500">
                             Manifest: {order.manifestStatus}
                           </div>
                         )}
@@ -1085,8 +1112,13 @@ const OrderManagement = () => {
                   {selectedOrders.map(orderId => {
                     const order = orders.find(o => o._id === orderId);
                     return (
-                      <div key={orderId} className="text-sm font-medium mb-1 text-slate-700">
-                        {order?.invoiceNo} - {order?.firstName} {order?.lastName}
+                      <div key={orderId} className="text-sm font-medium mb-1 text-slate-700 flex items-center gap-2">
+                        <span>{order?.invoiceNo} - {order?.firstName} {order?.lastName}</span>
+                        {order?.clubInfo?.clubbed && (
+                          <span className="text-xs text-violet-700 font-semibold">
+                            (already in "{order.clubInfo.clubName}")
+                          </span>
+                        )}
                       </div>
                     );
                   })}
