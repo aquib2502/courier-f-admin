@@ -152,13 +152,7 @@ const Clubbing = () => {
     return `${base}${pdf.startsWith("/") ? "" : "/"}${pdf}`;
   };
 
-  /**
-   * Bulk print: opens a single popup window that embeds all label URLs
-   * as iframes stacked vertically. No fetch/blob — each iframe loads
-   * the URL directly so CORS is never an issue.
-   * A status bar tracks load progress and enables "Print All" when ready.
-   */
-const handleBulkPrint = async (clubbing) => {
+const handleBulkPrint = (clubbing) => {
   const labelUrls = clubbing.clubbedOrders
     .map((order) => resolveLabel(order?.shipmentDetails?.pdf))
     .filter(Boolean);
@@ -168,17 +162,21 @@ const handleBulkPrint = async (clubbing) => {
     return;
   }
 
-  setBulkPrinting(clubbing._id);
-
-  const printWindow = window.open("", "_blank", "width=960,height=800");
+  const printWindow = window.open("", "_blank", "width=1000,height=860");
 
   if (!printWindow) {
     toast.error("Popup blocked! Please allow popups for this site and try again.");
-    setBulkPrinting(null);
     return;
   }
 
-  // Write a loading shell immediately so the window isn't blank
+  // Build iframes directly with the PDF URLs — no fetch/blob, no CORS
+  const iframeMarkup = labelUrls
+    .map(
+      (url) =>
+        `<iframe src="${url}" class="label-frame" onload="onFrameLoad()"></iframe>`
+    )
+    .join("\n");
+
   printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
@@ -186,6 +184,7 @@ const handleBulkPrint = async (clubbing) => {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #f1f5f9; font-family: sans-serif; }
+
     #bar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
       background: #1e293b; color: #fff;
@@ -194,90 +193,66 @@ const handleBulkPrint = async (clubbing) => {
     }
     #msg { font-size: 13px; flex: 1; }
     #progress { height: 4px; background: #334155; border-radius: 2px; flex: 1; max-width: 200px; overflow: hidden; }
-    #bar div#progress-fill { height: 100%; background: #f97316; width: 0%; transition: width 0.3s; border-radius: 2px; }
+    #progress-fill { height: 100%; background: #f97316; width: 0%; transition: width 0.3s; border-radius: 2px; }
     #printBtn {
       background: #f97316; color: #fff; border: none;
       padding: 8px 18px; border-radius: 6px;
       font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     #printBtn:disabled { background: #475569; cursor: not-allowed; }
+
     #wrapper { padding-top: 52px; }
     .label-frame {
-      display: block; width: 100%; height: 100vh;
-      border: none; page-break-after: always; break-after: page;
+      display: block;
+      width: 100%;
+      height: 100vh;
+      border: none;
+      page-break-after: always;
+      break-after: page;
     }
+
     @media print {
       #bar { display: none !important; }
       #wrapper { padding-top: 0 !important; }
-      .label-frame { height: 100vh !important; page-break-after: always !important; break-after: page !important; }
+      .label-frame {
+        height: 100vh !important;
+        page-break-after: always !important;
+        break-after: page !important;
+      }
     }
   </style>
+  <script>
+    var total = ${labelUrls.length};
+    var loaded = 0;
+
+    function onFrameLoad() {
+      loaded++;
+      var pct = Math.round((loaded / total) * 100);
+      var fill = document.getElementById('progress-fill');
+      var msg = document.getElementById('msg');
+      var btn = document.getElementById('printBtn');
+      if (fill) fill.style.width = pct + '%';
+      if (msg) msg.textContent = loaded < total
+        ? 'Loading labels… ' + loaded + ' / ' + total
+        : total + ' label(s) ready — click Print All';
+      if (btn && loaded >= total) btn.disabled = false;
+    }
+  <\/script>
 </head>
 <body>
   <div id="bar">
-    <span id="msg">Fetching labels… 0 / ${labelUrls.length}</span>
+    <span id="msg">Loading labels… 0 / ${labelUrls.length}</span>
     <div id="progress"><div id="progress-fill"></div></div>
     <button id="printBtn" disabled onclick="window.print()">🖨 Print All</button>
   </div>
-  <div id="wrapper"></div>
+  <div id="wrapper">
+    ${iframeMarkup}
+  </div>
 </body>
 </html>`);
+
   printWindow.document.close();
-
-  // Fetch all PDFs as blobs and inject as object URLs — bypasses the PDF viewer chrome entirely
-  try {
-    let fetched = 0;
-    const blobUrls = await Promise.all(
-      labelUrls.map(async (url) => {
-        try {
-          const res = await fetch(url, { credentials: "include" });
-          const blob = await res.blob();
-          fetched++;
-          const pct = Math.round((fetched / labelUrls.length) * 100);
-          if (printWindow && !printWindow.closed) {
-            const fill = printWindow.document.getElementById("progress-fill");
-            const msg = printWindow.document.getElementById("msg");
-            if (fill) fill.style.width = pct + "%";
-            if (msg) msg.textContent = `Fetching labels… ${fetched} / ${labelUrls.length}`;
-          }
-          return URL.createObjectURL(blob);
-        } catch {
-          fetched++;
-          return null;
-        }
-      })
-    );
-
-    const wrapper = printWindow.document?.getElementById("wrapper");
-    const msg = printWindow.document?.getElementById("msg");
-    const btn = printWindow.document?.getElementById("printBtn");
-
-    if (!wrapper || printWindow.closed) {
-      setBulkPrinting(null);
-      return;
-    }
-
-    blobUrls.forEach((blobUrl) => {
-      if (!blobUrl) return;
-      // Use <embed> with the blob URL — renders the raw PDF, no viewer chrome
-      const embed = printWindow.document.createElement("embed");
-      embed.src = blobUrl;
-      embed.type = "application/pdf";
-      embed.className = "label-frame";
-      wrapper.appendChild(embed);
-    });
-
-    const validCount = blobUrls.filter(Boolean).length;
-    if (msg) msg.textContent = `${validCount} label(s) ready — click Print All`;
-    if (btn) btn.disabled = false;
-
-    toast.success(`Opened bulk print window for ${validCount} label(s). Click "Print All" to print.`);
-  } catch (err) {
-    console.error("Bulk print error:", err);
-    toast.error("Failed to load labels for printing.");
-  } finally {
-    setBulkPrinting(null);
-  }
+  toast.success(`Opening ${labelUrls.length} label(s) for bulk print…`);
 };
   const filteredClubbings = getDateFilteredClubbings().filter((clubbing) => {
     const clubbingFields = [
