@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Settings, Edit, Trash2, Plus, Package, Globe, Weight, 
-  Save, X, Search, Filter, IndianRupee, ChevronDown, ChevronRight 
+import {
+  Settings, Edit, Trash2, Plus, Package, Globe, Weight,
+  Save, X, Search, Filter, IndianRupee, ChevronDown, ChevronRight
 } from 'lucide-react';
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
@@ -28,19 +28,35 @@ const RateManagement = () => {
   const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/rates`;
   const COUNTRIES_API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/rates/countries`;
 
-  // Package types based on country
-  const packagesByCountry = {
-    'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium DPD', 'Express', 'Premium Self', 'QuickExpress'],
-    'United Kingdom': ['Direct', 'First Class', 'Premium DPD', 'QuickExpress'],
-    'Canada': ['Direct', 'First Class', 'Premium DPD', 'Special', 'QuickExpress'],
-    'Australia': ['Direct', 'QuickExpress'],
-    'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide', 'QuickExpress'],
-    'United States (Remote)': ['Premium Self']
-  };
+  // // Package types based on country
+  // const packagesByCountry = {
+  //   'United States': ['Super Saver', 'Direct', 'USPS Special', 'First Class', 'Premium DPD', 'Express', 'Premium Self', 'QuickExpress'],
+  //   'United Kingdom': ['Direct', 'First Class', 'Premium DPD', 'QuickExpress'],
+  //   'Canada': ['Direct', 'First Class', 'Premium DPD', 'Special', 'QuickExpress'],
+  //   'Australia': ['Direct', 'QuickExpress'],
+  //   'European Union': ['Direct', 'Direct Yun', 'Premium DPD', 'Worldwide', 'QuickExpress'],
+  //   'United States (Remote)': ['Premium Self']
+  // };
+
+
+  const ALL_PACKAGES = [
+    'Super Saver',
+    'Direct',
+    'Direct Yun',
+    'USPS Special',
+    'First Class',
+    'Premium',
+    'Premium DPD',
+    'Express',
+    'Worldwide',
+    'Special',
+    'Premium Self',
+    'QuickExpress'
+  ];
 
   // Get available packages for selected country
-  const getAvailablePackages = (country) => {
-    return packagesByCountry[country] || [];
+  const getAvailablePackages = () => {
+    return ALL_PACKAGES;
   };
 
   // ================== FETCH RATES ==================
@@ -59,28 +75,28 @@ const RateManagement = () => {
     }
   };
 
-// ================== FETCH COUNTRIES ==================
-const fetchCountries = async () => {
-  try {
-    const { data } = await axios.get(COUNTRIES_API_URL, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
+  // ================== FETCH COUNTRIES ==================
+  const fetchCountries = async () => {
+    try {
+      const { data } = await axios.get(COUNTRIES_API_URL, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
 
-    // Add manual country
-    const manualCountry = { code: "US-REMOTE", name: "United States (Remote)" };
+      // Add manual country
+      const manualCountry = { code: "US-REMOTE", name: "United States (Remote)" };
 
-    // Make sure it is not duplicated
-    const countryExists = data.some(c => c.name === manualCountry.name);
+      // Make sure it is not duplicated
+      const countryExists = data.some(c => c.name === manualCountry.name);
 
-    const updatedCountries = countryExists ? data : [...data, manualCountry];
+      const updatedCountries = countryExists ? data : [...data, manualCountry];
 
-    setCountries(updatedCountries);
-  } catch (error) {
-    console.error('Failed to fetch countries:', error);
-  }
-};
+      setCountries(updatedCountries);
+    } catch (error) {
+      console.error('Failed to fetch countries:', error);
+    }
+  };
 
 
   useEffect(() => {
@@ -91,7 +107,7 @@ const fetchCountries = async () => {
   // ================== GROUPING ==================
   const groupedRates = () => {
     const filtered = rates.filter(rate => {
-      const matchesSearch = 
+      const matchesSearch =
         rate.dest_country.toLowerCase().includes(searchTerm.toLowerCase()) ||
         rate.package.toLowerCase().includes(searchTerm.toLowerCase()) ||
         rate.weight.toString().includes(searchTerm);
@@ -140,15 +156,15 @@ const fetchCountries = async () => {
       'Premium': 'bg-pink-100 text-pink-800 border-pink-200',
       'Express': 'bg-red-100 text-red-800 border-red-200',
       'Premium Self': 'bg-orange-100 text-orange-800 border-orange-200',
-      
+
       // Canada packages
       'Special': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      
+
       // European Union packages
       'Direct Yun': 'bg-teal-100 text-teal-800 border-teal-200',
       'Premium DPD': 'bg-violet-100 text-violet-800 border-violet-200',
       'Worldwide': 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200',
-      
+
       // Legacy packages
       'Cheaper': 'bg-green-100 text-green-800 border-green-200',
       'UPS': 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -233,8 +249,8 @@ const fetchCountries = async () => {
 
   // Handle country change and reset package selection
   const handleCountryChange = (country) => {
-    setRateForm(prev => ({ 
-      ...prev, 
+    setRateForm(prev => ({
+      ...prev,
       dest_country: country,
       package: '' // Reset package when country changes
     }));
@@ -264,7 +280,7 @@ const fetchCountries = async () => {
           <h1 className="text-2xl font-bold text-slate-800">Shipping Rate Management</h1>
           <p className="text-slate-600 mt-1">{Object.keys(grouped).length} countries • {totalRates} rates</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowRateForm(!showRateForm)}
           className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2"
         >
@@ -286,7 +302,7 @@ const fetchCountries = async () => {
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
             />
           </div>
-          
+
           <div className="relative">
             <Package size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
             <select
@@ -300,7 +316,7 @@ const fetchCountries = async () => {
               ))}
             </select>
           </div>
-          
+
           <div className="flex items-center justify-between">
             <div className="flex items-center text-slate-600">
               <Filter size={16} className="mr-2" />
@@ -329,14 +345,14 @@ const fetchCountries = async () => {
               <h3 className="text-lg font-semibold text-slate-800">
                 {editingRate ? 'Edit Shipping Rate' : 'Create New Shipping Rate'}
               </h3>
-              <button 
+              <button
                 onClick={resetForm}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -353,7 +369,7 @@ const fetchCountries = async () => {
                     required
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Rate (₹)
@@ -388,7 +404,7 @@ const fetchCountries = async () => {
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     Package Type
@@ -403,7 +419,7 @@ const fetchCountries = async () => {
                     <option value="">
                       {rateForm.dest_country ? 'Select Package Type' : 'Select Country First'}
                     </option>
-                    {rateForm.dest_country && getAvailablePackages(rateForm.dest_country).map(pkg => (
+                    {getAvailablePackages().map(pkg => (
                       <option key={pkg} value={pkg}>
                         {pkg}
                       </option>
@@ -438,7 +454,7 @@ const fetchCountries = async () => {
         {Object.entries(grouped).map(([country, countryRates]) => {
           const stats = getCountryStats(countryRates);
           const isExpanded = expandedCountries.has(country);
-          
+
           return (
             <motion.div
               key={country}
@@ -448,7 +464,7 @@ const fetchCountries = async () => {
               transition={{ duration: 0.3 }}
             >
               {/* Country Header */}
-              <div 
+              <div
                 className="p-6 border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors"
                 onClick={() => toggleCountry(country)}
               >
@@ -465,7 +481,7 @@ const fetchCountries = async () => {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-6 text-sm text-slate-600">
                     <div className="text-center">
                       <p className="text-xs text-slate-500">Weight Range</p>
@@ -505,18 +521,18 @@ const fetchCountries = async () => {
                                   <Weight size={16} className="text-slate-600" />
                                   <span className="font-medium text-slate-800">{rate.weight} kg</span>
                                 </div>
-                                
+
                                 <div className={`px-3 py-1 rounded-full text-sm font-medium border ${getPackageColor(rate.package)}`}>
                                   {rate.package}
                                 </div>
                               </div>
-                              
+
                               <div className="flex items-center space-x-4">
                                 <div className="flex items-center space-x-2">
                                   <IndianRupee size={18} className="text-green-600" />
                                   <span className="text-xl font-bold text-slate-800">{rate.rate}</span>
                                 </div>
-                                
+
                                 <div className="flex items-center space-x-1">
                                   <button
                                     onClick={(e) => {
@@ -551,13 +567,13 @@ const fetchCountries = async () => {
           );
         })}
       </div>
-      
+
       {Object.keys(grouped).length === 0 && (
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
           <Settings size={48} className="mx-auto text-slate-400 mb-4" />
           <p className="text-slate-600 mb-2">
-            {searchTerm || filterPackage 
-              ? 'No rates match your search criteria' 
+            {searchTerm || filterPackage
+              ? 'No rates match your search criteria'
               : 'No shipping rates configured yet'
             }
           </p>
