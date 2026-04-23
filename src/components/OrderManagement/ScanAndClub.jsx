@@ -24,6 +24,9 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
   const [scannerError, setScannerError] = useState('');
 
   const [scannedOrderIds, setScannedOrderIds] = useState([]);
+  // ✅ FIX: Ref that always mirrors scannedOrderIds — prevents stale closure bug on mobile
+  const scannedOrderIdsRef = useRef([]);
+
   const [clubName, setClubName] = useState('');
   const [clubbingLoading, setClubbingLoading] = useState(false);
   const [scanFeedback, setScanFeedback] = useState({ type: '', message: '' });
@@ -37,6 +40,11 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
   const videoRef = useRef(null);
   const scanTimeoutRef = useRef(null);
   const recentlyScannedRef = useRef(new Set());
+
+  // ✅ FIX: Keep ref in sync with state so scan callbacks always read latest value
+  useEffect(() => {
+    scannedOrderIdsRef.current = scannedOrderIds;
+  }, [scannedOrderIds]);
 
   /* ---------------------------
      Resize / mobile detection
@@ -192,9 +200,9 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
 
   /* ---------------------------
      Scan handler
-     - Shows "already scanned" if the order is in scannedOrderIds
-     - Shows "already clubbed" if the order has clubInfo.clubbed from the orders prop
-     - 2s hardware dedupe via recentlyScannedRef
+     ✅ FIX: Uses scannedOrderIdsRef.current instead of scannedOrderIds state
+     so the callback always reads the latest value — not a stale closure snapshot.
+     This is what caused duplicates to slip through on mobile.
      --------------------------- */
   const handleScanResult = (scannedCode) => {
     // Fast hardware dedupe: ignore physically repeated reads within 2s
@@ -211,8 +219,8 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
       return;
     }
 
-    // 1️⃣ Already in the current scan session
-    if (scannedOrderIds.includes(foundOrder._id)) {
+    // ✅ FIX: Read from ref (always current) instead of state (stale on mobile)
+    if (scannedOrderIdsRef.current.includes(foundOrder._id)) {
       showScanFeedback(
         'warning',
         `Order ${foundOrder.invoiceNo} already scanned in this session!`
@@ -221,7 +229,7 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
       return;
     }
 
-    // 2️⃣ Already clubbed in another club (server-side info carried in clubInfo)
+    // Already clubbed in another club (server-side info carried in clubInfo)
     if (foundOrder.clubInfo?.clubbed) {
       showScanFeedback(
         'error',
@@ -232,7 +240,12 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
     }
 
     // All clear — add to session
-    setScannedOrderIds((prev) => [...prev, foundOrder._id]);
+    setScannedOrderIds((prev) => {
+      const updated = [...prev, foundOrder._id];
+      // ✅ FIX: Also sync ref immediately so next scan in same tick sees the update
+      scannedOrderIdsRef.current = updated;
+      return updated;
+    });
     showScanFeedback(
       'success',
       `Added: ${foundOrder.invoiceNo} — ${foundOrder.firstName} ${foundOrder.lastName}`
@@ -246,9 +259,19 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
     scanTimeoutRef.current = setTimeout(() => setScanFeedback({ type: '', message: '' }), 3500);
   };
 
-  const removeScannedOrder = (orderId) => setScannedOrderIds((p) => p.filter((id) => id !== orderId));
+  // ✅ FIX: Sync ref immediately on remove
+  const removeScannedOrder = (orderId) => {
+    setScannedOrderIds((p) => {
+      const updated = p.filter((id) => id !== orderId);
+      scannedOrderIdsRef.current = updated;
+      return updated;
+    });
+  };
+
+  // ✅ FIX: Sync ref immediately on clear
   const clearAllScanned = () => {
     setScannedOrderIds([]);
+    scannedOrderIdsRef.current = [];
     recentlyScannedRef.current.clear();
   };
 
@@ -257,8 +280,6 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
 
   /* ---------------------------
      Club orders
-     - Also validates on the client side that no scanned order is already clubbed
-       (in case orders list was stale when modal opened)
      --------------------------- */
   const handleClubOrders = async () => {
     try {
@@ -311,6 +332,7 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
         if (onClubSuccess) onClubSuccess();
 
         setScannedOrderIds([]);
+        scannedOrderIdsRef.current = []; // ✅ FIX: sync ref on success reset
         setClubName('');
 
         setTimeout(() => {
@@ -323,7 +345,6 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
     } catch (err) {
       console.error('[ClubOrders] Failed to club orders:', err);
 
-      // Server sends descriptive conflict messages — surface them directly
       const errMsg =
         err?.response?.data?.message ||
         err?.message ||
