@@ -18,6 +18,7 @@ import Clubbing from '../Clubbing/Clubbing';
 import axios from 'axios';
 import { toast, ToastContainer } from 'react-toastify';
 import DisputeForm from '../Dispute/Dispute';
+import BlogManagement from '../Blogs/Blogs';
 
 /**
  * Dashboard Home Component with Mobile Responsive Design
@@ -415,6 +416,7 @@ export default function DashboardContent() {
       case 'rbfm': return <RBFM />;
       case 'clubbing': return <Clubbing />
       case 'inward-scan': return <DisputeForm />
+      case 'blogs': return <BlogManagement />
       default: return <UserManagement />;
     }
   };
