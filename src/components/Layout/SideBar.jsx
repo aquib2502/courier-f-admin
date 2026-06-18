@@ -18,7 +18,8 @@ import {
   SquaresExclude,
   Menu,
   ShieldAlert,
-  Inbox
+  Inbox,
+  Rss
 } from 'lucide-react';
 
 // Map string icon names from backend to Lucide icons
@@ -33,7 +34,8 @@ const ICONS = {
   Percent,
   TrendingUp,
   SquaresExclude,
-  Inbox
+  Inbox,
+  Rss
 };
 
 const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen }) => {
@@ -76,6 +78,8 @@ const Sidebar = ({ activeModule, setActiveModule, isMobile, isOpen, setIsOpen })
 
       const data = await res.json();
       const newMenu = data?.menu || [];
+
+      console.log(newMenu)
 
       if (res.ok) {
         setMenuItems(prev => {
