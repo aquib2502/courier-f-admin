@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import {
@@ -21,6 +21,9 @@ import {
   Save,
   ArrowUpRight,
   AlertTriangle,
+  Upload,
+  Images,
+  Loader2,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
@@ -45,6 +48,7 @@ const emptyForm = {
   excerpt: "",
   content: "",
   featuredImage: "",
+  gallery: [],
   author: "Admin",
   category: "General",
   tags: "",
@@ -81,6 +85,140 @@ const InputField = ({ label, required, children, hint }) => (
 const inputCls =
   "w-full px-3.5 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all";
 
+// ── Image Upload Zone ─────────────────────────────────────
+const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUrls = [] }) => {
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [previews, setPreviews] = useState(existingUrls);
+
+  // Sync if parent resets form
+  useEffect(() => {
+    setPreviews(existingUrls);
+  }, [existingUrls.join(",")]);
+
+  const handleFiles = useCallback(async (files) => {
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      if (multiple) {
+        Array.from(files).forEach((f) => formData.append("gallery", f));
+      } else {
+        formData.append("featuredImage", files[0]);
+      }
+
+      const res = await axios.post(`${API_BASE}/api/blogs/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const data = res.data?.data;
+      if (multiple) {
+        const newUrls = [...previews, ...(data.gallery || [])];
+        setPreviews(newUrls);
+        onUploaded(newUrls);
+      } else {
+        const url = data.featuredImage || "";
+        setPreviews(url ? [url] : []);
+        onUploaded(url);
+      }
+      toast.success("Image(s) uploaded successfully.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }, [previews, multiple, onUploaded]);
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const removeImage = (idx) => {
+    const updated = previews.filter((_, i) => i !== idx);
+    setPreviews(updated);
+    if (multiple) {
+      onUploaded(updated);
+    } else {
+      onUploaded("");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <label className="block text-sm font-semibold text-slate-700">{label}</label>
+
+      {/* Drop Zone */}
+      <div
+        onClick={() => !uploading && inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={`relative border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all
+          ${dragging ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50/40"}
+          ${uploading ? "pointer-events-none opacity-60" : ""}`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+          multiple={multiple}
+          className="hidden"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+        {uploading ? (
+          <div className="flex flex-col items-center gap-2 text-blue-500">
+            <Loader2 size={22} className="animate-spin" />
+            <p className="text-sm font-medium">Uploading…</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-slate-400">
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              {multiple ? <Images size={18} /> : <ImageIcon size={18} />}
+            </div>
+            <p className="text-sm font-medium text-slate-600">
+              {multiple ? "Drop images here or click to browse" : "Drop an image or click to browse"}
+            </p>
+            <p className="text-xs">
+              {multiple ? "JPG, PNG, WebP · max 5 MB each · up to 10 images" : "JPG, PNG, WebP · max 5 MB"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {hint && <p className="text-xs text-slate-400">{hint}</p>}
+
+      {/* Preview Grid */}
+      {previews.length > 0 && (
+        <div className={`grid gap-3 ${multiple ? "grid-cols-3 sm:grid-cols-4" : "grid-cols-1"}`}>
+          {previews.map((url, idx) => (
+            <div key={url + idx} className="relative group rounded-lg overflow-hidden bg-slate-100 aspect-video">
+              <img
+                src={url}
+                alt={`Image ${idx + 1}`}
+                className="w-full h-full object-cover"
+              />
+              <button
+                onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+              >
+                <X size={12} />
+              </button>
+              {!multiple && (
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2">
+                  <p className="text-white text-[10px] truncate">{url.split("/").pop()}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── Delete Confirmation Modal ─────────────────────────────
 const DeleteModal = ({ blog, onConfirm, onCancel, loading }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -115,9 +253,15 @@ const DeleteModal = ({ blog, onConfirm, onCancel, loading }) => (
 
 // ── Blog Form (Create / Edit) ─────────────────────────────
 const BlogForm = ({ initial, onClose, onSaved }) => {
-  const [form, setForm] = useState(initial || emptyForm);
+  const [form, setForm] = useState(() => ({
+    ...emptyForm,
+    ...(initial || {}),
+    tags: Array.isArray(initial?.tags) ? initial.tags.join(", ") : (initial?.tags || ""),
+    seoKeywords: Array.isArray(initial?.seoKeywords) ? initial.seoKeywords.join(", ") : (initial?.seoKeywords || ""),
+    gallery: initial?.gallery || [],
+  }));
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState("content"); // content | seo
+  const [tab, setTab] = useState("content");
   const isEdit = !!initial?._id;
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -137,6 +281,7 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
         seoKeywords: typeof form.seoKeywords === "string"
           ? form.seoKeywords.split(",").map((t) => t.trim()).filter(Boolean)
           : form.seoKeywords,
+        gallery: form.gallery || [],
       };
 
       if (isEdit) {
@@ -154,18 +299,13 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
     }
   };
 
-  // normalise tags for display
-  const tagsValue =
-    Array.isArray(form.tags) ? form.tags.join(", ") : form.tags;
-  const keywordsValue =
-    Array.isArray(form.seoKeywords) ? form.seoKeywords.join(", ") : form.seoKeywords;
+  const tagsValue = Array.isArray(form.tags) ? form.tags.join(", ") : form.tags;
+  const keywordsValue = Array.isArray(form.seoKeywords) ? form.seoKeywords.join(", ") : form.seoKeywords;
 
   return (
     <div className="fixed inset-0 z-40 flex">
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Drawer */}
       <div className="relative ml-auto w-full max-w-2xl bg-white shadow-2xl flex flex-col h-full overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
@@ -189,6 +329,7 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
         <div className="flex border-b border-slate-100 px-7">
           {[
             { key: "content", label: "Content" },
+            { key: "media", label: "Media" },
             { key: "seo", label: "SEO & Meta" },
           ].map(({ key, label }) => (
             <button
@@ -207,7 +348,8 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
 
         {/* Form body */}
         <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
-          {tab === "content" ? (
+          {/* ── CONTENT TAB ── */}
+          {tab === "content" && (
             <>
               <InputField label="Title" required>
                 <input
@@ -260,19 +402,6 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
                 </InputField>
               </div>
 
-              <InputField label="Featured Image URL">
-                <div className="relative">
-                  <ImageIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="url"
-                    placeholder="https://…"
-                    value={form.featuredImage}
-                    onChange={set("featuredImage")}
-                    className={`${inputCls} pl-9`}
-                  />
-                </div>
-              </InputField>
-
               <InputField label="Tags" hint="Comma-separated — e.g. shipping, logistics, tracking">
                 <div className="relative">
                   <Tag size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -297,7 +426,40 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
                 </select>
               </InputField>
             </>
-          ) : (
+          )}
+
+          {/* ── MEDIA TAB ── */}
+          {tab === "media" && (
+            <>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-2">
+                <p className="text-xs text-blue-700 font-medium flex items-center gap-1.5">
+                  <Upload size={12} />
+                  Images are uploaded to your own server and served as static files — great for SEO.
+                </p>
+              </div>
+
+              <ImageUploadZone
+                label="Featured Image"
+                hint="This is the cover image shown in listings and at the top of the article."
+                multiple={false}
+                existingUrls={form.featuredImage ? [form.featuredImage] : []}
+                onUploaded={(url) => setForm((f) => ({ ...f, featuredImage: url }))}
+              />
+
+              <div className="border-t border-slate-100 pt-5">
+                <ImageUploadZone
+                  label="Gallery Images"
+                  hint="Additional images displayed in a grid inside the article. Up to 10 images."
+                  multiple={true}
+                  existingUrls={form.gallery || []}
+                  onUploaded={(urls) => setForm((f) => ({ ...f, gallery: urls }))}
+                />
+              </div>
+            </>
+          )}
+
+          {/* ── SEO TAB ── */}
+          {tab === "seo" && (
             <>
               <InputField label="SEO Title" hint="Defaults to article title if blank">
                 <input
@@ -329,7 +491,6 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
                 />
               </InputField>
 
-              {/* Preview card */}
               {(form.seoTitle || form.title) && (
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
@@ -386,13 +547,12 @@ const BlogManagement = () => {
   const [pages, setPages] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [formBlog, setFormBlog] = useState(null); // null = closed, {} = new, {...} = edit
+  const [formBlog, setFormBlog] = useState(null);
   const [viewBlog, setViewBlog] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const LIMIT = 10;
 
-  // Stats
   const [stats, setStats] = useState({ total: 0, published: 0, draft: 0, views: 0 });
 
   const fetchBlogs = async (p = 1, status = statusFilter) => {
@@ -419,26 +579,35 @@ const BlogManagement = () => {
         axios.get(`${API_BASE}/api/blogs/admin?limit=1000`),
         axios.get(`${API_BASE}/api/blogs/admin?limit=1000&status=Published`),
       ]);
-      const all = allRes.data.data || [];
-      const pub = pubRes.data.data || [];
+      const all = allRes.data?.data || [];
+      const pub = pubRes.data?.data || [];
       setStats({
-        total: allRes.data.total || 0,
-        published: pubRes.data.total || 0,
-        draft: (allRes.data.total || 0) - (pubRes.data.total || 0),
+        total: allRes.data?.total || 0,
+        published: pubRes.data?.total || 0,
+        draft: (allRes.data?.total || 0) - (pubRes.data?.total || 0),
         views: all.reduce((s, b) => s + (b.views || 0), 0),
       });
     } catch {}
   };
 
   useEffect(() => {
-    fetchBlogs(1, statusFilter);
+    fetchBlogs();
     fetchStats();
-    // eslint-disable-next-line
   }, []);
 
-  const handleStatusFilter = (s) => {
-    setStatusFilter(s);
-    fetchBlogs(1, s);
+  const handleSaved = () => {
+    setFormBlog(null);
+    fetchBlogs(1);
+    fetchStats();
+  };
+
+  const handleEdit = async (id) => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/blogs/admin/${id}`);
+      setFormBlog(res.data?.data);
+    } catch {
+      toast.error("Failed to load article.");
+    }
   };
 
   const handleDelete = async () => {
@@ -457,207 +626,145 @@ const BlogManagement = () => {
     }
   };
 
-  const handleSaved = () => {
-    setFormBlog(null);
-    fetchBlogs(page);
-    fetchStats();
-  };
-
-  const handleEdit = async (id) => {
-    try {
-      const res = await axios.get(`${API_BASE}/api/blogs/admin/${id}`);
-      const b = res.data.data;
-      setFormBlog({
-        ...b,
-        tags: Array.isArray(b.tags) ? b.tags.join(", ") : b.tags || "",
-        seoKeywords: Array.isArray(b.seoKeywords) ? b.seoKeywords.join(", ") : b.seoKeywords || "",
-      });
-    } catch {
-      toast.error("Could not load article.");
-    }
-  };
-
-  // Client-side search filter
-  const displayed = search.trim()
+  const displayed = search
     ? blogs.filter(
         (b) =>
           b.title.toLowerCase().includes(search.toLowerCase()) ||
-          b.category?.toLowerCase().includes(search.toLowerCase()) ||
-          b.author?.toLowerCase().includes(search.toLowerCase())
+          b.category?.toLowerCase().includes(search.toLowerCase())
       )
     : blogs;
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       <ToastContainer position="top-right" autoClose={3000} />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Blog Management</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Manage all articles published on your website.</p>
+          <p className="text-sm text-slate-400 mt-1">Manage your editorial content</p>
         </div>
         <button
-          onClick={() => setFormBlog(emptyForm)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
+          onClick={() => setFormBlog({})}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors shadow-sm"
         >
-          <Plus size={16} />
-          New Article
+          <Plus size={16} /> New Article
         </button>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={FileText} label="Total articles" value={stats.total} color="bg-blue-500" />
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard icon={FileText} label="Total Articles" value={stats.total} color="bg-blue-500" />
         <StatCard icon={Globe} label="Published" value={stats.published} color="bg-emerald-500" />
-        <StatCard icon={Pencil} label="Drafts" value={stats.draft} color="bg-amber-500" />
-        <StatCard icon={BarChart2} label="Total views" value={stats.views.toLocaleString("en-IN")} color="bg-purple-500" />
+        <StatCard icon={Filter} label="Drafts" value={stats.draft} color="bg-amber-500" />
+        <StatCard icon={BarChart2} label="Total Views" value={stats.views.toLocaleString("en-IN")} color="bg-violet-500" />
       </div>
 
-      {/* Filters + Search */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by title, category, or author…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      {/* Table Card */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-slate-100">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search articles…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              fetchBlogs(1, e.target.value);
+            }}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          >
+            <option value="">All statuses</option>
+            <option value="Published">Published</option>
+            <option value="Draft">Draft</option>
+          </select>
         </div>
-        <div className="flex gap-2">
-          {["", "Published", "Draft"].map((s) => (
-            <button
-              key={s || "all"}
-              onClick={() => handleStatusFilter(s)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition-all ${
-                statusFilter === s
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {s || "All"}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        {/* Table */}
         {loading ? (
-          <div className="divide-y divide-slate-50">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-6 py-4">
-                <div className="w-10 h-10 rounded-lg bg-slate-100 animate-pulse" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-slate-100 rounded animate-pulse w-2/3" />
-                  <div className="h-3 bg-slate-100 rounded animate-pulse w-1/3" />
-                </div>
-                <div className="h-6 w-20 bg-slate-100 rounded-full animate-pulse" />
-              </div>
-            ))}
+          <div className="py-20 text-center text-slate-400">
+            <Loader2 size={28} className="animate-spin mx-auto mb-3" />
+            <p className="text-sm">Loading articles…</p>
           </div>
         ) : displayed.length === 0 ? (
           <div className="py-20 text-center">
-            <FileText size={36} className="text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-500 font-medium">No articles found</p>
-            <p className="text-slate-400 text-sm mt-1">
-              {search ? "Try a different search term." : "Click 'New Article' to get started."}
-            </p>
+            <FileText size={32} className="mx-auto text-slate-200 mb-3" />
+            <p className="text-slate-400 text-sm">No articles found.</p>
           </div>
         ) : (
           <>
             {/* Desktop table */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/60">
-                    {["Article", "Category", "Author", "Status", "Views", "Published", ""].map((h) => (
-                      <th
-                        key={h}
-                        className="px-6 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide"
-                      >
-                        {h}
-                      </th>
-                    ))}
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Article</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Category</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Status</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Views</th>
+                    <th className="px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Date</th>
+                    <th className="px-6 py-3" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {displayed.map((b) => (
-                    <tr key={b._id} className="hover:bg-slate-50/50 transition-colors group">
+                    <tr key={b._id} className="group hover:bg-slate-50/80 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {b.featuredImage ? (
-                            <img
-                              src={b.featuredImage}
-                              alt=""
-                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                            />
+                            <img src={b.featuredImage} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                              <FileText size={15} className="text-slate-400" />
+                              <FileText size={14} className="text-slate-400" />
                             </div>
                           )}
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate max-w-[260px]">
-                              {b.title}
-                            </p>
-                            <p className="text-xs text-slate-400 truncate max-w-[260px] mt-0.5">
-                              {b.excerpt || "No excerpt"}
+                          <div>
+                            <p className="font-semibold text-slate-800 text-sm leading-tight line-clamp-1">{b.title}</p>
+                            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                              By {b.author}
+                              {b.gallery?.length > 0 && (
+                                <span className="flex items-center gap-0.5 text-blue-400">
+                                  <Images size={10} /> {b.gallery.length}
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-500">{b.category || "—"}</td>
-                      <td className="px-6 py-4 text-sm text-slate-500">{b.author || "Admin"}</td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                            STATUS_STYLES[b.status] || "bg-gray-100 text-gray-500"
-                          }`}
-                        >
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_STYLES[b.status] || "bg-gray-100 text-gray-500"}`}>
                           {b.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-500">
-                        {(b.views || 0).toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400">
-                        {formatDate(b.publishedAt || b.createdAt)}
-                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-500">{(b.views || 0).toLocaleString("en-IN")}</td>
+                      <td className="px-6 py-4 text-sm text-slate-400">{formatDate(b.publishedAt || b.createdAt)}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {b.status === "Published" && (
-                            <a
-                              href={`/blogs/${b.slug}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                              title="View live"
-                            >
+                            <a href={`/blogs/${b.slug}`} target="_blank" rel="noreferrer"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="View live">
                               <ArrowUpRight size={14} />
                             </a>
                           )}
-                          <button
-                            onClick={() => setViewBlog(b)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-500 hover:bg-violet-50 transition-colors"
-                            title="Quick view"
-                          >
+                          <button onClick={() => setViewBlog(b)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-violet-500 hover:bg-violet-50 transition-colors" title="Quick view">
                             <Eye size={14} />
                           </button>
-                          <button
-                            onClick={() => handleEdit(b._id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                            title="Edit"
-                          >
+                          <button onClick={() => handleEdit(b._id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
-                          <button
-                            onClick={() => setDeleteTarget(b)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                            title="Delete"
-                          >
+                          <button onClick={() => setDeleteTarget(b)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -683,20 +790,14 @@ const BlogManagement = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-800 text-sm leading-tight line-clamp-2">{b.title}</p>
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${STATUS_STYLES[b.status]}`}>
-                          {b.status}
-                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${STATUS_STYLES[b.status]}`}>{b.status}</span>
                         <span className="text-xs text-slate-400">{b.category}</span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pt-1">
-                    <button onClick={() => handleEdit(b._id)} className="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-                      Edit
-                    </button>
-                    <button onClick={() => setDeleteTarget(b)} className="flex-1 py-2 text-xs font-semibold rounded-lg border border-red-100 text-red-500 hover:bg-red-50 transition-colors">
-                      Delete
-                    </button>
+                    <button onClick={() => handleEdit(b._id)} className="flex-1 py-2 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Edit</button>
+                    <button onClick={() => setDeleteTarget(b)} className="flex-1 py-2 text-xs font-semibold rounded-lg border border-red-100 text-red-500 hover:bg-red-50 transition-colors">Delete</button>
                   </div>
                 </div>
               ))}
@@ -707,22 +808,14 @@ const BlogManagement = () => {
         {/* Pagination */}
         {!loading && pages > 1 && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-xs text-slate-400">
-              Page {page} of {pages} — {total} articles
-            </p>
+            <p className="text-xs text-slate-400">Page {page} of {pages} — {total} articles</p>
             <div className="flex gap-2">
-              <button
-                onClick={() => fetchBlogs(page - 1)}
-                disabled={page === 1}
-                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={() => fetchBlogs(page - 1)} disabled={page === 1}
+                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 <ChevronLeft size={15} />
               </button>
-              <button
-                onClick={() => fetchBlogs(page + 1)}
-                disabled={page === pages}
-                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
+              <button onClick={() => fetchBlogs(page + 1)} disabled={page === pages}
+                className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -734,21 +827,17 @@ const BlogManagement = () => {
       {viewBlog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewBlog(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[80vh] overflow-y-auto">
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto">
             {viewBlog.featuredImage && (
               <img src={viewBlog.featuredImage} alt={viewBlog.title} className="w-full h-48 object-cover rounded-t-2xl" />
             )}
             <div className="p-6">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
-                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border mb-2 ${STATUS_STYLES[viewBlog.status]}`}>
-                    {viewBlog.status}
-                  </span>
+                  <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border mb-2 ${STATUS_STYLES[viewBlog.status]}`}>{viewBlog.status}</span>
                   <h3 className="text-xl font-bold text-slate-800">{viewBlog.title}</h3>
                 </div>
-                <button onClick={() => setViewBlog(null)} className="p-2 hover:bg-slate-100 rounded-lg flex-shrink-0">
-                  <X size={16} />
-                </button>
+                <button onClick={() => setViewBlog(null)} className="p-2 hover:bg-slate-100 rounded-lg flex-shrink-0"><X size={16} /></button>
               </div>
 
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-400 mb-4">
@@ -756,9 +845,22 @@ const BlogManagement = () => {
                 <span>By {viewBlog.author}</span>
                 <span>{viewBlog.category}</span>
                 <span>{viewBlog.views || 0} views</span>
+                {viewBlog.gallery?.length > 0 && <span className="flex items-center gap-1 text-blue-500"><Images size={12} />{viewBlog.gallery.length} gallery images</span>}
               </div>
 
               {viewBlog.excerpt && <p className="text-slate-500 text-sm mb-5">{viewBlog.excerpt}</p>}
+
+              {/* Gallery preview in modal */}
+              {viewBlog.gallery?.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Gallery</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {viewBlog.gallery.slice(0, 8).map((url, i) => (
+                      <img key={i} src={url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {viewBlog.tags?.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -769,7 +871,8 @@ const BlogManagement = () => {
               )}
 
               <div className="flex gap-3 mt-6 pt-5 border-t border-slate-100">
-                <button onClick={() => { handleEdit(viewBlog._id); setViewBlog(null); }} className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors">
+                <button onClick={() => { handleEdit(viewBlog._id); setViewBlog(null); }}
+                  className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-colors">
                   Edit article
                 </button>
                 {viewBlog.status === "Published" && (
@@ -786,12 +889,7 @@ const BlogManagement = () => {
 
       {/* Delete Confirmation */}
       {deleteTarget && (
-        <DeleteModal
-          blog={deleteTarget}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
-          loading={deleting}
-        />
+        <DeleteModal blog={deleteTarget} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} loading={deleting} />
       )}
 
       {/* Create / Edit Form Drawer */}
