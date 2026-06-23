@@ -24,6 +24,13 @@ import {
   Upload,
   Images,
   Loader2,
+  Linkedin,
+  Twitter,
+  Instagram,
+  Facebook,
+  Link2,
+  User,
+  ImagePlus,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL;
@@ -50,6 +57,15 @@ const emptyForm = {
   featuredImage: "",
   gallery: [],
   author: "Admin",
+  authorImage: "",
+  authorBio: "",
+  authorSocial: {
+    linkedin: "",
+    twitter: "",
+    instagram: "",
+    facebook: "",
+    website: "",
+  },
   category: "General",
   tags: "",
   status: "Draft",
@@ -86,7 +102,7 @@ const inputCls =
   "w-full px-3.5 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all";
 
 // ── Image Upload Zone ─────────────────────────────────────
-const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUrls = [] }) => {
+const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUrls = [], uploadField }) => {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -97,15 +113,17 @@ const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUr
     setPreviews(existingUrls);
   }, [existingUrls.join(",")]);
 
+  const fieldName = uploadField || (multiple ? "gallery" : "featuredImage");
+
   const handleFiles = useCallback(async (files) => {
     if (!files?.length) return;
     setUploading(true);
     try {
       const formData = new FormData();
       if (multiple) {
-        Array.from(files).forEach((f) => formData.append("gallery", f));
+        Array.from(files).forEach((f) => formData.append(fieldName, f));
       } else {
-        formData.append("featuredImage", files[0]);
+        formData.append(fieldName, files[0]);
       }
 
       const res = await axios.post(`${API_BASE}/api/blogs/upload`, formData, {
@@ -114,11 +132,11 @@ const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUr
 
       const data = res.data?.data;
       if (multiple) {
-        const newUrls = [...previews, ...(data.gallery || [])];
+        const newUrls = [...previews, ...(data[fieldName] || [])];
         setPreviews(newUrls);
         onUploaded(newUrls);
       } else {
-        const url = data.featuredImage || "";
+        const url = data[fieldName] || "";
         setPreviews(url ? [url] : []);
         onUploaded(url);
       }
@@ -128,7 +146,7 @@ const ImageUploadZone = ({ label, hint, multiple = false, onUploaded, existingUr
     } finally {
       setUploading(false);
     }
-  }, [previews, multiple, onUploaded]);
+  }, [previews, multiple, onUploaded, fieldName]);
 
   const onDrop = (e) => {
     e.preventDefault();
@@ -262,9 +280,54 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
   }));
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("content");
+  const [insertingImage, setInsertingImage] = useState(false);
+  const contentRef = useRef(null);
+  const contentImageInputRef = useRef(null);
   const isEdit = !!initial?._id;
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const setSocial = (field) => (e) =>
+    setForm((f) => ({ ...f, authorSocial: { ...f.authorSocial, [field]: e.target.value } }));
+
+  // Upload a single image and insert it at the cursor position inside the content textarea,
+  // so authors can drop images in between paragraphs rather than only at the top/bottom.
+  const insertContentImage = async (file) => {
+    if (!file) return;
+    setInsertingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("contentImage", file);
+      const res = await axios.post(`${API_BASE}/api/blogs/upload`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const url = res.data?.data?.contentImage;
+      if (!url) throw new Error("No URL returned");
+
+      const snippet = `\n<figure>\n  <img src="${url}" alt="" />\n  <figcaption>Add a caption…</figcaption>\n</figure>\n`;
+      const textarea = contentRef.current;
+
+      setForm((f) => {
+        const start = textarea?.selectionStart ?? f.content.length;
+        const end = textarea?.selectionEnd ?? f.content.length;
+        const newContent = f.content.slice(0, start) + snippet + f.content.slice(end);
+
+        if (textarea) {
+          requestAnimationFrame(() => {
+            textarea.focus();
+            const pos = start + snippet.length;
+            textarea.setSelectionRange(pos, pos);
+          });
+        }
+        return { ...f, content: newContent };
+      });
+
+      toast.success("Image inserted into content.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to upload image.");
+    } finally {
+      setInsertingImage(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!form.title.trim() || !form.content.trim()) {
@@ -330,6 +393,7 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
           {[
             { key: "content", label: "Content" },
             { key: "media", label: "Media" },
+            { key: "author", label: "Author" },
             { key: "seo", label: "SEO & Meta" },
           ].map(({ key, label }) => (
             <button
@@ -372,35 +436,57 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
                 />
               </InputField>
 
-              <InputField label="Content (HTML supported)" required>
-                <textarea
-                  rows={12}
-                  placeholder="Write your article content here. HTML tags are supported."
-                  value={form.content}
-                  onChange={set("content")}
-                  className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
-                />
+              <InputField
+                label="Content (HTML supported)"
+                required
+                hint="Use “Insert image” to drop a photo between paragraphs at your cursor position."
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <input
+                      ref={contentImageInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        insertContentImage(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => contentImageInputRef.current?.click()}
+                      disabled={insertingImage}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 transition-colors"
+                    >
+                      {insertingImage ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <ImagePlus size={13} />
+                      )}
+                      {insertingImage ? "Uploading…" : "Insert image"}
+                    </button>
+                  </div>
+                  <textarea
+                    ref={contentRef}
+                    rows={12}
+                    placeholder="Write your article content here. HTML tags are supported."
+                    value={form.content}
+                    onChange={set("content")}
+                    className={`${inputCls} resize-y font-mono text-xs leading-relaxed`}
+                  />
+                </div>
               </InputField>
 
-              <div className="grid grid-cols-2 gap-4">
-                <InputField label="Author">
-                  <input
-                    type="text"
-                    value={form.author}
-                    onChange={set("author")}
-                    className={inputCls}
-                  />
-                </InputField>
-                <InputField label="Category">
-                  <input
-                    type="text"
-                    placeholder="e.g. Logistics"
-                    value={form.category}
-                    onChange={set("category")}
-                    className={inputCls}
-                  />
-                </InputField>
-              </div>
+              <InputField label="Category">
+                <input
+                  type="text"
+                  placeholder="e.g. Logistics"
+                  value={form.category}
+                  onChange={set("category")}
+                  className={inputCls}
+                />
+              </InputField>
 
               <InputField label="Tags" hint="Comma-separated — e.g. shipping, logistics, tracking">
                 <div className="relative">
@@ -455,6 +541,111 @@ const BlogForm = ({ initial, onClose, onSaved }) => {
                   onUploaded={(urls) => setForm((f) => ({ ...f, gallery: urls }))}
                 />
               </div>
+            </>
+          )}
+
+          {/* ── AUTHOR TAB ── */}
+          {tab === "author" && (
+            <>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-2">
+                <p className="text-xs text-blue-700 font-medium flex items-center gap-1.5">
+                  <User size={12} />
+                  Shown in an author card at the end of the published article.
+                </p>
+              </div>
+
+              <InputField label="Author Name">
+                <input
+                  type="text"
+                  placeholder="e.g. Kuldeep Karki"
+                  value={form.author}
+                  onChange={set("author")}
+                  className={inputCls}
+                />
+              </InputField>
+
+              <ImageUploadZone
+                label="Author Photo"
+                hint="A square headshot works best."
+                multiple={false}
+                existingUrls={form.authorImage ? [form.authorImage] : []}
+                onUploaded={(url) => setForm((f) => ({ ...f, authorImage: url }))}
+                uploadField="authorImage"
+              />
+
+              <InputField label="Short Bio" hint="2–3 sentences about the author and their expertise.">
+                <textarea
+                  rows={3}
+                  placeholder="e.g. Digital Marketing Manager at Acme, specialising in SEO and growth strategy…"
+                  value={form.authorBio}
+                  onChange={set("authorBio")}
+                  className={`${inputCls} resize-none`}
+                />
+              </InputField>
+
+              <div className="grid grid-cols-2 gap-4">
+                <InputField label="LinkedIn URL">
+                  <div className="relative">
+                    <Linkedin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="url"
+                      placeholder="https://linkedin.com/in/…"
+                      value={form.authorSocial?.linkedin || ""}
+                      onChange={setSocial("linkedin")}
+                      className={`${inputCls} pl-9`}
+                    />
+                  </div>
+                </InputField>
+                <InputField label="Twitter / X URL">
+                  <div className="relative">
+                    <Twitter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="url"
+                      placeholder="https://x.com/…"
+                      value={form.authorSocial?.twitter || ""}
+                      onChange={setSocial("twitter")}
+                      className={`${inputCls} pl-9`}
+                    />
+                  </div>
+                </InputField>
+                <InputField label="Instagram URL">
+                  <div className="relative">
+                    <Instagram size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="url"
+                      placeholder="https://instagram.com/…"
+                      value={form.authorSocial?.instagram || ""}
+                      onChange={setSocial("instagram")}
+                      className={`${inputCls} pl-9`}
+                    />
+                  </div>
+                </InputField>
+                <InputField label="Facebook URL">
+                  <div className="relative">
+                    <Facebook size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="url"
+                      placeholder="https://facebook.com/…"
+                      value={form.authorSocial?.facebook || ""}
+                      onChange={setSocial("facebook")}
+                      className={`${inputCls} pl-9`}
+                    />
+                  </div>
+                </InputField>
+              </div>
+
+              <InputField label="Website URL">
+                <div className="relative">
+                  <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="url"
+                    placeholder="https://…"
+                    value={form.authorSocial?.website || ""}
+                    onChange={setSocial("website")}
+                    className={`${inputCls} pl-9`}
+                  />
+                </div>
+              </InputField>
             </>
           )}
 
