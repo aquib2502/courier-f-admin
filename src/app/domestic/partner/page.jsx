@@ -96,7 +96,7 @@ const s = {
 // Create Partner Modal
 // ─────────────────────────────────────────────────────────────
 function CreatePartnerModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: "", initialWalletBalance: "" });
+  const [form, setForm] = useState({ name: "", initialWalletBalance: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
@@ -117,7 +117,12 @@ function CreatePartnerModal({ onClose, onCreated }) {
     try {
       const res = await api("/api/domestic-admin/add-partner", {
         method: "POST",
-        body: JSON.stringify({ name: form.name, initialWalletBalance: Number(form.initialWalletBalance) || 0 }),
+        body: JSON.stringify({ 
+          name: form.name, 
+          initialWalletBalance: Number(form.initialWalletBalance) || 0,
+          email: form.email.trim() || undefined,
+          password: form.password || undefined
+        }),
       });
       setCreated(res.data);
       onCreated?.();
@@ -169,7 +174,14 @@ function CreatePartnerModal({ onClose, onCreated }) {
               <div style={s.formRow}>
                 <label style={s.label}>Initial Wallet Balance (₹)</label>
                 <input style={s.input} type="number" placeholder="0" value={form.initialWalletBalance} onChange={set("initialWalletBalance")} />
-                <div style={{ fontSize: 11, color: "#4E5A67", marginTop: 4 }}>Leave at 0 to top up later via Credit Wallet.</div>
+              </div>
+              <div style={s.formRow}>
+                <label style={s.label}>Email Address (For Website Login)</label>
+                <input style={s.input} type="email" placeholder="e.g. partner@example.com" value={form.email} onChange={set("email")} />
+              </div>
+              <div style={s.formRow}>
+                <label style={s.label}>Password</label>
+                <input style={s.input} type="password" placeholder="Min 6 characters" value={form.password} onChange={set("password")} />
               </div>
             </>
           )}
