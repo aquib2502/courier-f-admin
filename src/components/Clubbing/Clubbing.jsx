@@ -18,9 +18,11 @@ import {
   FileTextIcon,
   Printer,
   Loader2,
+  Scale,
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import EditDisputeModal from "../OrderManagement/EditDisputeModal";
 
 const Clubbing = () => {
   const [clubbings, setClubbings] = useState([]);
@@ -35,14 +37,28 @@ const Clubbing = () => {
   const [orderPage, setOrderPage] = useState(1);
   const ordersPerPage = 10;
 
-  useEffect(() => {
-    fetchClubbings();
-  }, []);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [editingDisputeOrder, setEditingDisputeOrder] = useState(null);
 
   const fetchClubbings = async () => {
     try {
+      setLoading(true);
+      const params = new URLSearchParams();
+
+      if (dateFilter && dateFilter !== "all" && dateFilter !== "custom") {
+        params.append("date", dateFilter);
+      } else if (dateFilter === "custom") {
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+      }
+
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
       const response = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/clubbing`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/clubbing?${params.toString()}`
       );
       if (response.status === 200) {
         setClubbings(response?.data?.data || []);
@@ -54,24 +70,16 @@ const Clubbing = () => {
     }
   };
 
-  const getDateFilteredClubbings = () => {
-    const now = new Date();
-    return clubbings.filter((clubbing) => {
-      const clubbingDate = new Date(clubbing.clubbedAt);
-      switch (dateFilter) {
-        case "today":
-          return clubbingDate.toDateString() === now.toDateString();
-        case "week":
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          return clubbingDate >= weekAgo;
-        case "month":
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          return clubbingDate >= monthAgo;
-        default:
-          return true;
-      }
-    });
-  };
+  useEffect(() => {
+    fetchClubbings();
+  }, [dateFilter, startDate, endDate]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchClubbings();
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const toggleExpanded = (clubbingId) => {
     if (expandedClubbing === clubbingId) {
@@ -254,26 +262,8 @@ const handleBulkPrint = (clubbing) => {
   printWindow.document.close();
   toast.success(`Opening ${labelUrls.length} label(s) for bulk print…`);
 };
-  const filteredClubbings = getDateFilteredClubbings().filter((clubbing) => {
-    const clubbingFields = [
-      clubbing.clubName,
-      clubbing.usernames,
-      clubbing.useremails,
-      clubbing.clubbedOrders.length.toString(),
-      calculateTotalValue(clubbing).toString(),
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    const orderInvoices = clubbing.clubbedOrders
-      .map((order) => order.invoiceNo)
-      .join(" ")
-      .toLowerCase();
-
-    return `${clubbingFields} ${orderInvoices}`.includes(
-      searchTerm.toLowerCase()
-    );
-  });
+  // Clubbings returned directly from backend query
+  const filteredClubbings = clubbings;
 
   if (loading) {
     return (
@@ -346,30 +336,74 @@ const handleBulkPrint = (clubbing) => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
+        {/* Quick Date Presets */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+            Date Filter:
+          </span>
+          {[
+            { id: "all", label: "All Time" },
+            { id: "today", label: "Today" },
+            { id: "yesterday", label: "Yesterday" },
+            { id: "week", label: "Last 7 Days" },
+            { id: "month", label: "Last 30 Days" },
+            { id: "custom", label: "Custom Range" },
+          ].map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => {
+                setDateFilter(preset.id);
+                if (preset.id !== "custom") {
+                  setStartDate("");
+                  setEndDate("");
+                }
+              }}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
+                dateFilter === preset.id
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom Date Pickers */}
+        {dateFilter === "custom" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by club name, user details, order count, order invoice or value..."
+              placeholder="Search by club name, user details, order count, order invoice..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500"
+              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
             />
-          </div>
-          <div className="relative">
-            <Filter size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="pl-10 pr-8 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 appearance-none bg-white"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-            </select>
           </div>
         </div>
       </div>
@@ -616,7 +650,14 @@ const handleBulkPrint = (clubbing) => {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3">
-                                  <div className="flex items-center space-x-1">
+                                  <div className="flex items-center space-x-2">
+                                    <button
+                                      onClick={() => setEditingDisputeOrder(order)}
+                                      className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold"
+                                      title="Edit Weight & Raise Dispute"
+                                    >
+                                      <Scale size={14} />
+                                    </button>
                                     {order.shipmentDetails?.pdf && (
                                       <a
                                         href={resolveLabel(order.shipmentDetails.pdf)}
@@ -704,6 +745,13 @@ const handleBulkPrint = (clubbing) => {
           </div>
         </div>
       )}
+      {/* Edit Dispute Modal */}
+      <EditDisputeModal
+        isOpen={!!editingDisputeOrder}
+        onClose={() => setEditingDisputeOrder(null)}
+        order={editingDisputeOrder}
+        onSuccess={() => fetchClubbings()}
+      />
     </motion.div>
   );
 };

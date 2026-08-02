@@ -20,25 +20,27 @@ import {
   Globe,
   Weight,
   Users,
-  X,
-  Plus,
-  Mail,
-  CheckSquare,
+  Clock, 
+  CheckCircle, 
+  AlertTriangle, 
+  RefreshCw, 
+  X, 
+  CheckSquare, 
   Square,
-  ShoppingBag,
-  CreditCard,
+  ChevronDown, 
+  ChevronUp, 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronsLeft, 
+  ChevronsRight, 
+  FileText as FileTextIcon, 
   MoreVertical,
-  ChevronDown,
-  ChevronUp,
-  FileTextIcon,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Link2,
+  Scale,
+  Plus
 } from 'lucide-react';
 import axios from 'axios';
 import { ToastContainer,toast } from 'react-toastify';
+import EditDisputeModal from './EditDisputeModal';
 
 const OrderManagement = () => {
   const [orders, setOrders] = useState([]);
@@ -46,6 +48,9 @@ const OrderManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday', 'week', 'month', 'custom'
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [isMobile, setIsMobile] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [expandedCards, setExpandedCards] = useState(new Set());
@@ -68,6 +73,9 @@ const OrderManagement = () => {
   const [pendingOrderId, setPendingOrderId] = useState(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
+  // Dispute / Edit Weight modal state
+  const [editingDisputeOrder, setEditingDisputeOrder] = useState(null);
+
   // Detect mobile screen size
   useEffect(() => {
     const checkMobile = () => {
@@ -79,22 +87,52 @@ const OrderManagement = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
   const fetchOrders = async () => {
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total`)
+      setLoading(true);
+      const params = new URLSearchParams();
+      
+      if (dateFilter && dateFilter !== 'all' && dateFilter !== 'custom') {
+        params.append('date', dateFilter);
+      } else if (dateFilter === 'custom') {
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+      }
+
+      if (filterStatus && filterStatus !== 'all') {
+        params.append('status', filterStatus);
+      }
+
+      if (filterPaymentStatus && filterPaymentStatus !== 'all') {
+        params.append('paymentStatus', filterPaymentStatus);
+      }
+
+      if (searchTerm && searchTerm.trim()) {
+        params.append('search', searchTerm.trim());
+      }
+
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/orders/total?${params.toString()}`);
       if (response.status === 200) {
         setOrders(response?.data?.data || []);
-        setLoading(false);
       }
     } catch (error) {
       console.error('Failed to fetch orders:', error);
+    } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [dateFilter, startDate, endDate, filterStatus, filterPaymentStatus]);
+
+  // Debounce search query changes
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchOrders();
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
 
   const handleStatusChangeClick = (orderId, status) => {
     setPendingOrderId(orderId);
@@ -205,24 +243,8 @@ const OrderManagement = () => {
     }
   };
 
-  // Filter orders
-  const filteredOrders = orders.filter(order => {
-    const searchFields = [
-      order._id,
-      order.firstName,
-      order.lastName,
-      order.mobile,
-      order.invoiceNo,
-      order.city,
-      order.country
-    ].join(' ').toLowerCase();
-
-    const matchesSearch = searchFields.includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || order.orderStatus?.toLowerCase() === filterStatus.toLowerCase();
-    const matchesPayment = filterPaymentStatus === 'all' || order.paymentStatus?.toLowerCase().includes(filterPaymentStatus.toLowerCase());
-    
-    return matchesSearch && matchesStatus && matchesPayment;
-  });
+  // Filter orders (handled server-side via MongoDB, fallback alias)
+  const filteredOrders = orders;
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredOrders.length / rowsPerPage);
@@ -502,6 +524,14 @@ const OrderManagement = () => {
           </button>
 
           <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setEditingDisputeOrder(order)}
+              className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-semibold"
+              title="Edit Weight & Raise Dispute"
+            >
+              <Scale size={16} />
+              <span>Edit/Dispute</span>
+            </button>
             <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
               <Eye size={16} />
             </button>
@@ -717,6 +747,63 @@ const OrderManagement = () => {
               className="w-full pl-10 pr-4 py-2.5 sm:py-3 border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
             />
           </div>
+          {/* Date Filter Quick Presets */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+              Date Filter:
+            </span>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: 'yesterday', label: 'Yesterday' },
+              { id: 'week', label: 'Last 7 Days' },
+              { id: 'month', label: 'Last 30 Days' },
+              { id: 'custom', label: 'Custom Range' },
+            ].map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => {
+                  setDateFilter(preset.id);
+                  if (preset.id !== 'custom') {
+                    setStartDate('');
+                    setEndDate('');
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-[0.98] ${
+                  dateFilter === preset.id
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Date Inputs */}
+          {dateFilter === 'custom' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative">
               <Filter size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
@@ -913,6 +1000,15 @@ const OrderManagement = () => {
                     
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setEditingDisputeOrder(order)}
+                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                          title="Edit Weight & Raise Dispute"
+                        >
+                          <Scale size={16} />
+                          <span className="hidden sm:inline">Edit/Dispute</span>
+                        </button>
+
                         <div className="relative">
                           <button
                             onClick={() => setActiveAction(order._id === activeAction ? null : order._id)}
@@ -1125,6 +1221,14 @@ const OrderManagement = () => {
                 </div>
               </div>
 
+              {/* Warehouse Inward Scan Badge */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start space-x-2 text-xs text-emerald-800">
+                <CheckSquare size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Simultaneous Inward Scan:</span> Clubbing automatically logs warehouse inward receipt (<code className="bg-emerald-100 px-1 py-0.5 rounded text-emerald-900 font-mono">receivedAt</code>) for all selected orders simultaneously.
+                </div>
+              </div>
+
               {/* Club Name Input */}
               <div>
                 <label className="block text-sm font-semibold mb-2 text-slate-800">
@@ -1210,6 +1314,13 @@ const OrderManagement = () => {
           </motion.div>
         </div>
       )}
+      {/* Edit Dispute Modal */}
+      <EditDisputeModal
+        isOpen={!!editingDisputeOrder}
+        onClose={() => setEditingDisputeOrder(null)}
+        order={editingDisputeOrder}
+        onSuccess={() => fetchOrders()}
+      />
     </motion.div>
   );
 };

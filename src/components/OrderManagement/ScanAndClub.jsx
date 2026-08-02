@@ -2,20 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  X,
-  Camera,
-  Users,
-  Trash2,
-  ScanLine,
-  CheckCircle,
-  AlertCircle,
-  Package,
-  Loader2,
-  ChevronDown,
-  Minimize2,
-  Maximize2,
+import { 
+  Scan, X, Trash2, Camera, AlertTriangle, CheckCircle, Package, Users, 
+  Loader2, Minimize2, Maximize2, RefreshCw, ChevronDown, AlertCircle, Scale
 } from 'lucide-react';
+import EditDisputeModal from './EditDisputeModal';
 
 const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
   const [codeReader, setCodeReader] = useState(null);
@@ -35,6 +26,7 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
   const [isMobile, setIsMobile] = useState(false);
   const [showOrdersList, setShowOrdersList] = useState(false);
   const [isVideoMinimized, setIsVideoMinimized] = useState(false);
+  const [editingDisputeOrder, setEditingDisputeOrder] = useState(null);
 
   // refs
   const videoRef = useRef(null);
@@ -575,12 +567,21 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
                         </p>
                         <p className={`text-slate-500 text-xs`}>{order.mobile}</p>
                       </div>
-                      <button
-                        onClick={() => removeScannedOrder(order._id)}
-                        className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition-colors"
-                      >
-                        <X size={isMobile ? 12 : 14} />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => setEditingDisputeOrder(order)}
+                          className="text-amber-600 hover:text-amber-700 p-1 hover:bg-amber-50 rounded transition-colors"
+                          title="Edit Weight & Raise Dispute"
+                        >
+                          <Scale size={isMobile ? 12 : 14} />
+                        </button>
+                        <button
+                          onClick={() => removeScannedOrder(order._id)}
+                          className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition-colors"
+                        >
+                          <X size={isMobile ? 12 : 14} />
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -610,6 +611,14 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
                 />
               </div>
 
+              {/* Inward Scan Badge */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 text-xs text-emerald-800 flex items-start space-x-2">
+                <CheckCircle size={14} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                <span>
+                  <strong className="font-semibold">Simultaneous Inward Scan:</strong> Clubbing automatically logs warehouse inward receipt for all scanned orders.
+                </span>
+              </div>
+
               <button
                 onClick={handleClubOrders}
                 disabled={clubbingLoading || scannedOrderIds.length === 0 || !clubName.trim()}
@@ -620,12 +629,12 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
                 {clubbingLoading ? (
                   <>
                     <Loader2 size={isMobile ? 16 : 18} className="animate-spin" />
-                    <span>Clubbing...</span>
+                    <span>Clubbing & Inward Scanning...</span>
                   </>
                 ) : (
                   <>
                     <Users size={isMobile ? 16 : 18} />
-                    <span>Club Orders</span>
+                    <span>Club & Inward Scan Orders</span>
                   </>
                 )}
               </button>
@@ -633,6 +642,15 @@ const ScanAndClub = ({ isOpen, onClose, orders, onClubSuccess }) => {
           )}
         </div>
       </motion.div>
+      {/* Edit Dispute Modal */}
+      <EditDisputeModal
+        isOpen={!!editingDisputeOrder}
+        onClose={() => setEditingDisputeOrder(null)}
+        order={editingDisputeOrder}
+        onSuccess={() => {
+          if (onClubSuccess) onClubSuccess();
+        }}
+      />
     </div>
   );
 };

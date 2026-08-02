@@ -6,12 +6,12 @@ import axios from "axios";
 import { ToastContainer, toast } from "react-toastify";
 
 const disputeTypes = [
-  { value: "weight_discrepancy", label: "Weight Discrepancy", icon: "⚖️" },
-  { value: "missing_parcel", label: "Missing Parcel", icon: "📦" },
-  { value: "damaged_parcel", label: "Damaged Parcel", icon: "💔" },
-  { value: "incorrect_order", label: "Incorrect Order", icon: "❌" },
-  { value: "late_pickup", label: "Late Pickup", icon: "⏰" },
-  { value: "other", label: "Other", icon: "❓" }
+  { value: "weight_discrepancy", label: "Weight Discrepancy" },
+  { value: "missing_parcel", label: "Missing Parcel" },
+  { value: "damaged_parcel", label: "Damaged Parcel" },
+  { value: "incorrect_order", label: "Incorrect Order Details" },
+  { value: "late_pickup", label: "Late Pickup" },
+  { value: "other", label: "Other Operational Issue" }
 ];
 
 const InwardScan = () => {
@@ -769,7 +769,7 @@ const InwardScan = () => {
                               <option value="">Select dispute type...</option>
                               {disputeTypes.map((type) => (
                                 <option key={type.value} value={type.value}>
-                                  {type.icon} {type.label}
+                                  {type.label}
                                 </option>
                               ))}
                             </select>
