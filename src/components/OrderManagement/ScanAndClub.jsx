@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Scan, X, Trash2, Camera, AlertTriangle, CheckCircle, Package, Users, 
+  Scan, ScanLine, X, Trash2, Camera, AlertTriangle, CheckCircle, Package, Users, 
   Loader2, Minimize2, Maximize2, RefreshCw, ChevronDown, AlertCircle, Scale
 } from 'lucide-react';
 import EditDisputeModal from './EditDisputeModal';
