@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import * as XLSX from "xlsx";
 import EditDisputeModal from "../OrderManagement/EditDisputeModal";
 
 const Clubbing = () => {
@@ -265,6 +266,94 @@ const handleBulkPrint = (clubbing) => {
   // Clubbings returned directly from backend query
   const filteredClubbings = clubbings;
 
+  const handleExportExcel = () => {
+    if (!filteredClubbings || filteredClubbings.length === 0) {
+      toast.warning("No clubbing data available to export.");
+      return;
+    }
+
+    const exportRows = [];
+
+    filteredClubbings.forEach((clubbing) => {
+      const clubName = clubbing.clubName || "N/A";
+      const clubbedDate = clubbing.clubbedAt
+        ? new Date(clubbing.clubbedAt).toLocaleDateString()
+        : "N/A";
+
+      if (clubbing.clubbedOrders && clubbing.clubbedOrders.length > 0) {
+        clubbing.clubbedOrders.forEach((order) => {
+          const productNames = (order.productItems || [])
+            .map((item) => `${item.productName} (x${item.productQuantity})`)
+            .join(", ");
+
+          const orderValue = (order.productItems || []).reduce(
+            (sum, item) => sum + (item.productPrice * item.productQuantity || 0),
+            0
+          );
+
+          exportRows.push({
+            "Club Name": clubName,
+            "Clubbed Date": clubbedDate,
+            "Invoice No": order.invoiceNo || "N/A",
+            "Invoice Date": order.invoiceDate
+              ? new Date(order.invoiceDate).toLocaleDateString()
+              : "N/A",
+            "Customer Name": `${order.firstName || ""} ${order.lastName || ""}`.trim(),
+            "Mobile": order.mobile || "",
+            "Email": order.email || "",
+            "Country": order.country || "",
+            "State": order.state || "",
+            "City": order.city || "",
+            "Pincode": order.pincode || "",
+            "Weight (kg)": order.weight || 0,
+            "Products": productNames,
+            "Order Value": orderValue,
+            "Currency": order.invoiceCurrency || "USD",
+            "Order Status": order.orderStatus || "",
+            "Payment Status": order.paymentStatus || "",
+            "Manifest Status": order.manifestStatus || "N/A",
+          });
+        });
+      } else {
+        exportRows.push({
+          "Club Name": clubName,
+          "Clubbed Date": clubbedDate,
+          "Invoice No": "N/A",
+          "Invoice Date": "N/A",
+          "Customer Name": "N/A",
+          "Mobile": "",
+          "Email": "",
+          "Country": "",
+          "State": "",
+          "City": "",
+          "Pincode": "",
+          "Weight (kg)": 0,
+          "Products": "",
+          "Order Value": 0,
+          "Currency": "",
+          "Order Status": "",
+          "Payment Status": "",
+          "Manifest Status": "",
+        });
+      }
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Clubbings");
+
+    let dateStr = new Date().toISOString().split("T")[0];
+    if (dateFilter === "custom" && startDate) {
+      dateStr = `${startDate}${endDate ? "_to_" + endDate : ""}`;
+    } else if (dateFilter !== "all") {
+      dateStr = dateFilter;
+    }
+
+    const fileName = `Clubbings_Export_${dateStr}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success(`Exported ${exportRows.length} rows to ${fileName}`);
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -302,7 +391,10 @@ const handleBulkPrint = (clubbing) => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-800">Clubbing Management</h1>
         <div className="flex items-center space-x-3">
-          <button className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2">
+          <button
+            onClick={handleExportExcel}
+            className="bg-slate-800 text-white px-4 py-2 rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-2 cursor-pointer shadow-sm active:scale-95"
+          >
             <Download size={16} />
             <span>Export</span>
           </button>
