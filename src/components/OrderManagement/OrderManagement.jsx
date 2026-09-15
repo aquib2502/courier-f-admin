@@ -36,15 +36,18 @@ import {
   FileText as FileTextIcon, 
   MoreVertical,
   Scale,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import axios from 'axios';
 import { ToastContainer,toast } from 'react-toastify';
+import * as XLSX from 'xlsx';
 import EditDisputeModal from './EditDisputeModal';
 
 const OrderManagement = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState('all');
@@ -87,9 +90,13 @@ const OrderManagement = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setIsFetching(true);
+      }
       const params = new URLSearchParams();
       
       if (dateFilter && dateFilter !== 'all' && dateFilter !== 'custom') {
@@ -119,20 +126,23 @@ const OrderManagement = () => {
       console.error('Failed to fetch orders:', error);
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
   };
 
   useEffect(() => {
-    fetchOrders();
-  }, [dateFilter, startDate, endDate, filterStatus, filterPaymentStatus]);
+    fetchOrders(true);
+  }, []);
 
-  // Debounce search query changes
+  // Debounce search and filter changes
   useEffect(() => {
-    const handler = setTimeout(() => {
-      fetchOrders();
-    }, 350);
-    return () => clearTimeout(handler);
-  }, [searchTerm]);
+    if (!loading) {
+      const handler = setTimeout(() => {
+        fetchOrders(false);
+      }, 350);
+      return () => clearTimeout(handler);
+    }
+  }, [dateFilter, startDate, endDate, filterStatus, filterPaymentStatus, searchTerm]);
 
   const handleStatusChangeClick = (orderId, status) => {
     setPendingOrderId(orderId);
@@ -615,6 +625,61 @@ const OrderManagement = () => {
     );
   }
 
+  const handleExportExcel = () => {
+    if (!filteredOrders || filteredOrders.length === 0) {
+      toast.warning("No orders available to export.");
+      return;
+    }
+
+    const exportRows = filteredOrders.map((order) => {
+      const productNames = (order.productItems || [])
+        .map((item) => `${item.productName} (x${item.productQuantity})`)
+        .join(", ");
+
+      const totalAmount = (order.productItems || []).reduce(
+        (sum, item) => sum + (item.productPrice * item.productQuantity || 0),
+        0
+      );
+
+      return {
+        "Invoice No": order.invoiceNo || "N/A",
+        "Invoice Date": order.invoiceDate
+          ? new Date(order.invoiceDate).toLocaleDateString()
+          : "N/A",
+        "Customer Name": `${order.firstName || ""} ${order.lastName || ""}`.trim(),
+        "Mobile": order.mobile || "",
+        "Country": order.country || "",
+        "State": order.state || "",
+        "City": order.city || "",
+        "Pincode": order.pincode || "",
+        "Weight (kg)": order.weight || 0,
+        "Products": productNames,
+        "Order Value": totalAmount,
+        "Currency": order.invoiceCurrency || "USD",
+        "Order Status": order.orderStatus || "",
+        "Payment Status": order.paymentStatus || "",
+        "Manifest Status": order.manifestStatus || "N/A",
+        "Clubbed Info": order.clubInfo?.clubbed ? `Clubbed in ${order.clubInfo.clubName}` : "No",
+        "Last Mile AWB": order.lastMileAWB || order.shipmentDetails?.trackingNumber || order.shipmentDetails?.awbNumber || "N/A",
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
+
+    let dateStr = new Date().toISOString().split("T")[0];
+    if (dateFilter === "custom" && startDate) {
+      dateStr = `${startDate}${endDate ? "_to_" + endDate : ""}`;
+    } else if (dateFilter !== "all") {
+      dateStr = dateFilter;
+    }
+
+    const fileName = `Orders_Export_${dateStr}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    toast.success(`Exported ${exportRows.length} orders to ${fileName}`);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -623,7 +688,15 @@ const OrderManagement = () => {
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
+        <div className="flex items-center space-x-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Order Management</h1>
+          {isFetching && (
+            <div className="flex items-center space-x-2 text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+              <Loader2 size={13} className="animate-spin" />
+              <span>Updating...</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center space-x-2 sm:space-x-3">
           {selectedOrders.length > 0 && (
             <button 
@@ -645,7 +718,10 @@ const OrderManagement = () => {
             <span className="hidden sm:inline">Scan & Club</span>
             <span className="sm:hidden">Scan</span>
           </button>
-          <button className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base">
+          <button 
+            onClick={handleExportExcel}
+            className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl hover:bg-slate-700 transition-colors flex items-center space-x-1 sm:space-x-2 text-sm sm:text-base cursor-pointer active:scale-95"
+          >
             <Download size={isMobile ? 14 : 16} />
             <span className="hidden sm:inline">Export</span>
           </button>
@@ -744,8 +820,11 @@ const OrderManagement = () => {
               placeholder="Search by Order ID, Customer, Mobile..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 sm:py-3 border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
+              className="w-full pl-10 pr-10 py-2.5 sm:py-3 border border-slate-200 rounded-lg sm:rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
             />
+            {isFetching && (
+              <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+            )}
           </div>
           {/* Date Filter Quick Presets */}
           <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">

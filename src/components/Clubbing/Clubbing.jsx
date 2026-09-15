@@ -28,6 +28,7 @@ import EditDisputeModal from "../OrderManagement/EditDisputeModal";
 const Clubbing = () => {
   const [clubbings, setClubbings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [dateFilter, setDateFilter] = useState("all");
   const [expandedClubbing, setExpandedClubbing] = useState(null);
@@ -42,9 +43,13 @@ const Clubbing = () => {
   const [endDate, setEndDate] = useState("");
   const [editingDisputeOrder, setEditingDisputeOrder] = useState(null);
 
-  const fetchClubbings = async () => {
+  const fetchClubbings = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      } else {
+        setIsFetching(true);
+      }
       const params = new URLSearchParams();
 
       if (dateFilter && dateFilter !== "all" && dateFilter !== "custom") {
@@ -68,19 +73,22 @@ const Clubbing = () => {
       console.error("Failed to fetch clubbings:", error);
     } finally {
       setLoading(false);
+      setIsFetching(false);
     }
   };
 
   useEffect(() => {
-    fetchClubbings();
-  }, [dateFilter, startDate, endDate]);
+    fetchClubbings(true);
+  }, []);
 
   useEffect(() => {
-    const handler = setTimeout(() => {
-      fetchClubbings();
-    }, 350);
-    return () => clearTimeout(handler);
-  }, [searchTerm]);
+    if (!loading) {
+      const handler = setTimeout(() => {
+        fetchClubbings(false);
+      }, 350);
+      return () => clearTimeout(handler);
+    }
+  }, [dateFilter, startDate, endDate, searchTerm]);
 
   const toggleExpanded = (clubbingId) => {
     if (expandedClubbing === clubbingId) {
@@ -275,7 +283,9 @@ const handleBulkPrint = (clubbing) => {
     const exportRows = [];
 
     filteredClubbings.forEach((clubbing) => {
-      const clubName = clubbing.clubName || "N/A";
+      const rawClubName = clubbing.clubName || "N/A";
+      const userNamesStr = clubbing.usernames || (clubbing.userIds || []).map(u => u.fullname).filter(Boolean).join(", ");
+      const clubNameWithUser = userNamesStr ? `${rawClubName} (${userNamesStr})` : rawClubName;
       const clubbedDate = clubbing.clubbedAt
         ? new Date(clubbing.clubbedAt).toLocaleDateString()
         : "N/A";
@@ -292,7 +302,8 @@ const handleBulkPrint = (clubbing) => {
           );
 
           exportRows.push({
-            "Club Name": clubName,
+            "Club Name": clubNameWithUser,
+            "User Name": userNamesStr || "N/A",
             "Clubbed Date": clubbedDate,
             "Invoice No": order.invoiceNo || "N/A",
             "Invoice Date": order.invoiceDate
@@ -300,7 +311,6 @@ const handleBulkPrint = (clubbing) => {
               : "N/A",
             "Customer Name": `${order.firstName || ""} ${order.lastName || ""}`.trim(),
             "Mobile": order.mobile || "",
-            "Email": order.email || "",
             "Country": order.country || "",
             "State": order.state || "",
             "City": order.city || "",
@@ -312,17 +322,18 @@ const handleBulkPrint = (clubbing) => {
             "Order Status": order.orderStatus || "",
             "Payment Status": order.paymentStatus || "",
             "Manifest Status": order.manifestStatus || "N/A",
+            "Last Mile AWB": order.lastMileAWB || order.shipmentDetails?.trackingNumber || order.shipmentDetails?.awbNumber || "N/A",
           });
         });
       } else {
         exportRows.push({
-          "Club Name": clubName,
+          "Club Name": clubNameWithUser,
+          "User Name": userNamesStr || "N/A",
           "Clubbed Date": clubbedDate,
           "Invoice No": "N/A",
           "Invoice Date": "N/A",
           "Customer Name": "N/A",
           "Mobile": "",
-          "Email": "",
           "Country": "",
           "State": "",
           "City": "",
@@ -334,6 +345,7 @@ const handleBulkPrint = (clubbing) => {
           "Order Status": "",
           "Payment Status": "",
           "Manifest Status": "",
+          "Last Mile AWB": "N/A",
         });
       }
     });
@@ -389,7 +401,15 @@ const handleBulkPrint = (clubbing) => {
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">Clubbing Management</h1>
+        <div className="flex items-center space-x-3">
+          <h1 className="text-2xl font-bold text-slate-800">Clubbing Management</h1>
+          {isFetching && (
+            <div className="flex items-center space-x-2 text-xs text-blue-600 font-medium bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+              <Loader2 size={13} className="animate-spin" />
+              <span>Updating...</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={handleExportExcel}
@@ -494,8 +514,11 @@ const handleBulkPrint = (clubbing) => {
               placeholder="Search by club name, user details, order count, order invoice..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
+              className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm sm:text-base"
             />
+            {isFetching && (
+              <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+            )}
           </div>
         </div>
       </div>
@@ -530,7 +553,18 @@ const handleBulkPrint = (clubbing) => {
                         <Users size={20} className="text-blue-600" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-800">{clubbing.clubName}</h3>
+                        <h3 className="text-lg font-semibold text-slate-800">
+                          {clubbing.clubName}
+                          {clubbing.usernames ? (
+                            <span className="ml-2 text-sm font-normal text-slate-500">
+                              ({clubbing.usernames})
+                            </span>
+                          ) : (clubbing.userIds && clubbing.userIds.length > 0) ? (
+                            <span className="ml-2 text-sm font-normal text-slate-500">
+                              ({clubbing.userIds.map(u => u.fullname).filter(Boolean).join(", ")})
+                            </span>
+                          ) : null}
+                        </h3>
                         <p className="text-sm text-slate-500">
                           Created {new Date(clubbing.clubbedAt).toLocaleDateString()}
                         </p>
